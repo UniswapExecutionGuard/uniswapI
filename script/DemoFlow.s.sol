@@ -9,7 +9,7 @@ import {MockENSRegistry, MockENSResolver, MockPoolManager, SwapExecutor} from ".
 
 contract DemoFlow is Script {
     function run() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerKey = vm.envUint("PRIVATE_KEY_ANVIL");
 
         vm.startBroadcast(deployerKey);
 
