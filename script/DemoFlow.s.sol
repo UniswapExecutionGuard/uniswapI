@@ -23,15 +23,14 @@ contract DemoFlow is Script {
 
         bytes32 node = ENSNamehash.namehash("alice.eth");
         ens.setResolver(node, address(resolver));
-        resolver.setAddr(node, payable(trader));
-
+        resolver.setAddr(node, payable(address(executor)));
         registry.setPolicyForENS("alice.eth", 100, 30);
 
         // Allowed swap attempt.
-        executor.trySwap(address(poolManager), address(hook), trader, 80);
+        executor.trySwap(address(poolManager), address(hook), 80);
 
         // Blocked swap attempt (max swap violation).
-        executor.trySwap(address(poolManager), address(hook), trader, 150);
+        executor.trySwap(address(poolManager), address(hook), 150);
 
         vm.stopBroadcast();
 

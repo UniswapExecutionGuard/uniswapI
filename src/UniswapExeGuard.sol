@@ -3,13 +3,16 @@ pragma solidity ^0.8.24;
 
 import {BaseHook} from "./BaseHook.sol";
 import {PolicyRegistry} from "./PolicyRegistry.sol";
-import {Ownable} from "./Ownable.sol";
+import {Ownable} from "../lib/v4-core/lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 
 contract UniswapExeGuard is BaseHook, Ownable {
+    using Hooks for IHooks;
+
     PolicyRegistry public immutable registry;
 
     uint256 public defaultMaxSwapAbs;
@@ -34,12 +37,37 @@ contract UniswapExeGuard is BaseHook, Ownable {
         uint256 cooldownSeconds;
     }
 
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory permissions) {
+        permissions = Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: true,
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    /// @notice Validates that this deployed address encodes the required hook permission bits.
+    /// Reverts with `Hooks.HookAddressNotValid` when deployed at an invalid address.
+    function validateHookAddress() external view {
+        IHooks(address(this)).validateHookPermissions(getHookPermissions());
+    }
+
     constructor(
         address poolManager,
         address policyRegistry,
         uint256 _defaultMaxSwapAbs,
         uint256 _defaultCooldownSeconds
-    ) BaseHook(poolManager) {
+    ) BaseHook(poolManager) Ownable(msg.sender) {
         require(policyRegistry != address(0), "REG_ZERO");
         registry = PolicyRegistry(policyRegistry);
         defaultMaxSwapAbs = _defaultMaxSwapAbs;

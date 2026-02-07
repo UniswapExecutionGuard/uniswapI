@@ -10,7 +10,7 @@ library ENSNamehash {
         uint256 labelStart = 0;
         bytes memory nameBytes = bytes(name);
         for (uint256 i = 0; i <= nameBytes.length; i++) {
-            if (i == nameBytes.length || nameBytes[i] == '.') {
+            if (i == nameBytes.length || nameBytes[i] == ".") {
                 uint256 labelLen = i - labelStart;
                 bytes32 labelHash = keccak256(slice(nameBytes, labelStart, labelLen));
                 node = keccak256(abi.encodePacked(node, labelHash));

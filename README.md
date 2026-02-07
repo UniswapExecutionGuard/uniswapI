@@ -28,6 +28,7 @@ This repo consumes those packages from `lib/` and uses official interfaces/types
   - Hook that enforces policies in `beforeSwap`
   - Emits audit events for allowed/blocked swaps
   - Applies global defaults if no policy exists
+  - Declares `Hooks.Permissions` and includes `validateHookAddress()`
 
 - `src/ENS.sol`
   - ENS interfaces + namehash helper
@@ -66,6 +67,12 @@ export DEFAULT_MAX_SWAP_ABS=<optional_uint>
 export DEFAULT_COOLDOWN_SECONDS=<optional_uint>
 ```
 
+Important Uniswap v4 hook deployment constraint:
+
+- Hook behavior is selected by permission bits encoded in the hook contract address.
+- This guard enables `beforeSwap`, so the deployed hook address must include the `BEFORE_SWAP` flag bits.
+- `validateHookAddress()` reverts if the current deployment address does not match declared permissions.
+
 Run:
 
 ```shell
@@ -100,7 +107,7 @@ Check the printed transaction hashes and `SwapExecutor.SwapAttempt` event result
 ## Demo Flow (Expected)
 
 - Configure policy for `alice.eth` via `PolicyRegistry.setPolicyForENS`
-- Swap via the pool manager and observe:
+- Swap via the pool manager and observe (policy is evaluated for the swap caller/sender):
   - Allowed swap emits `SwapAllowed`
   - Violations revert with `MaxSwapExceeded` or `CooldownNotElapsed`
 

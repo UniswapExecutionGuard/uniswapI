@@ -6,6 +6,7 @@ import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 
 abstract contract BaseHook is IHooks {
     IPoolManager public immutable poolManager;
@@ -21,11 +22,19 @@ abstract contract BaseHook is IHooks {
         _;
     }
 
+    /// @notice Official Uniswap v4 hook pattern exposes declared permissions in the hook contract.
+    function getHookPermissions() public pure virtual returns (Hooks.Permissions memory);
+
     function beforeInitialize(address, PoolKey calldata, uint160) external virtual onlyPoolManager returns (bytes4) {
         revert HookNotImplemented();
     }
 
-    function afterInitialize(address, PoolKey calldata, uint160, int24) external virtual onlyPoolManager returns (bytes4) {
+    function afterInitialize(address, PoolKey calldata, uint160, int24)
+        external
+        virtual
+        onlyPoolManager
+        returns (bytes4)
+    {
         revert HookNotImplemented();
     }
 
@@ -49,12 +58,12 @@ abstract contract BaseHook is IHooks {
         revert HookNotImplemented();
     }
 
-    function beforeRemoveLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        external
-        virtual
-        onlyPoolManager
-        returns (bytes4)
-    {
+    function beforeRemoveLiquidity(
+        address,
+        PoolKey calldata,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) external virtual onlyPoolManager returns (bytes4) {
         revert HookNotImplemented();
     }
 

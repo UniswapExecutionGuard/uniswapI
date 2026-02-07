@@ -36,6 +36,7 @@ contract MockENSRegistry is ENS {
 
     function setRecord(bytes32, address, address, uint64) external {}
     function setSubnodeRecord(bytes32, bytes32, address, address, uint64) external {}
+
     function setSubnodeOwner(bytes32, bytes32, address) external pure returns (bytes32) {
         return bytes32(0);
     }
@@ -57,24 +58,22 @@ contract MockENSResolver is IAddrResolver {
 }
 
 contract MockPoolManager {
-    function swap(address hook, address trader, int256 amountSpecified) external {
+    function swap(address hook, int256 amountSpecified) external {
         PoolKey memory key;
         IPoolManager.SwapParams memory params =
             IPoolManager.SwapParams({zeroForOne: true, amountSpecified: amountSpecified, sqrtPriceLimitX96: 0});
-        UniswapExeGuard(hook).beforeSwap(trader, key, params, "");
+        UniswapExeGuard(hook).beforeSwap(msg.sender, key, params, "");
     }
 }
 
 contract SwapExecutor {
     event SwapAttempt(bool success, bytes returndata);
 
-    function trySwap(address poolManager, address hook, address trader, int256 amountSpecified)
+    function trySwap(address poolManager, address hook, int256 amountSpecified)
         external
         returns (bool success, bytes memory returndata)
     {
-        (success, returndata) = poolManager.call(
-            abi.encodeWithSignature("swap(address,address,int256)", hook, trader, amountSpecified)
-        );
+        (success, returndata) = poolManager.call(abi.encodeWithSignature("swap(address,int256)", hook, amountSpecified));
         emit SwapAttempt(success, returndata);
     }
 }

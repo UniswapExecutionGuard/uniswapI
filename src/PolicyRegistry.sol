@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import {ENS} from "../lib/ens-contracts/contracts/registry/ENS.sol";
 import {IAddrResolver} from "../lib/ens-contracts/contracts/resolvers/profiles/IAddrResolver.sol";
+import {Ownable} from "../lib/v4-core/lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {ENSNamehash} from "./ENS.sol";
-import {Ownable} from "./Ownable.sol";
 
 contract PolicyRegistry is Ownable {
     struct Policy {
@@ -20,7 +20,7 @@ contract PolicyRegistry is Ownable {
     event PolicySet(address indexed trader, uint256 maxSwapAbs, uint256 cooldownSeconds);
     event PolicyCleared(address indexed trader);
 
-    constructor(address ensRegistry) {
+    constructor(address ensRegistry) Ownable(msg.sender) {
         require(ensRegistry != address(0), "ENS_ZERO");
         ens = ENS(ensRegistry);
     }
@@ -44,7 +44,11 @@ contract PolicyRegistry is Ownable {
         emit PolicyCleared(trader);
     }
 
-    function getPolicy(address trader) external view returns (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists) {
+    function getPolicy(address trader)
+        external
+        view
+        returns (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists)
+    {
         Policy memory p = policies[trader];
         return (p.maxSwapAbs, p.cooldownSeconds, p.exists);
     }

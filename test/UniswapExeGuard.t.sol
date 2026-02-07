@@ -8,6 +8,7 @@ import {ENS} from "../lib/ens-contracts/contracts/registry/ENS.sol";
 import {IAddrResolver} from "../lib/ens-contracts/contracts/resolvers/profiles/IAddrResolver.sol";
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
+import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 
 interface Vm {
     function warp(uint256) external;
@@ -59,6 +60,7 @@ contract MockENSRegistry is ENS {
 
     function setRecord(bytes32, address, address, uint64) external {}
     function setSubnodeRecord(bytes32, bytes32, address, address, uint64) external {}
+
     function setSubnodeOwner(bytes32, bytes32, address) external pure returns (bytes32) {
         return bytes32(0);
     }
@@ -80,11 +82,17 @@ contract MockENSResolver is IAddrResolver {
 }
 
 contract MockPoolManager {
-    function swap(address hook, address trader, int256 amountSpecified) external {
+    function swap(address hook, int256 amountSpecified) external {
         PoolKey memory key;
         IPoolManager.SwapParams memory params =
             IPoolManager.SwapParams({zeroForOne: true, amountSpecified: amountSpecified, sqrtPriceLimitX96: 0});
-        UniswapExeGuard(hook).beforeSwap(trader, key, params, "");
+        UniswapExeGuard(hook).beforeSwap(msg.sender, key, params, "");
+    }
+}
+
+contract SwapCaller {
+    function swapViaPool(address pool, address hook, int256 amountSpecified) external {
+        MockPoolManager(pool).swap(hook, amountSpecified);
     }
 }
 
@@ -94,6 +102,7 @@ contract UniswapExeGuardTest is TestUtils {
     PolicyRegistry private registry;
     MockPoolManager private pool;
     UniswapExeGuard private hook;
+    SwapCaller private caller;
 
     address private trader = address(0xBEEF);
 
@@ -102,6 +111,7 @@ contract UniswapExeGuardTest is TestUtils {
         resolver = new MockENSResolver();
         registry = new PolicyRegistry(address(ens));
         pool = new MockPoolManager();
+        caller = new SwapCaller();
         hook = new UniswapExeGuard(address(pool), address(registry), 100, 30);
     }
 
@@ -119,29 +129,41 @@ contract UniswapExeGuardTest is TestUtils {
     }
 
     function testAllowedSwapWithinLimits() public {
-        registry.setPolicy(trader, 200, 10);
-        pool.swap(address(hook), trader, 150);
+        registry.setPolicy(address(caller), 200, 10);
+        caller.swapViaPool(address(pool), address(hook), 150);
     }
 
     function testRevertWhenExceedsMaxSwap() public {
-        registry.setPolicy(trader, 100, 0);
+        registry.setPolicy(address(caller), 100, 0);
         vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.MaxSwapExceeded.selector, 100, 150));
-        pool.swap(address(hook), trader, 150);
+        caller.swapViaPool(address(pool), address(hook), 150);
     }
 
     function testRevertWhenCooldownActive() public {
-        registry.setPolicy(trader, 0, 20);
-        pool.swap(address(hook), trader, 10);
+        registry.setPolicy(address(caller), 0, 20);
+        caller.swapViaPool(address(pool), address(hook), 10);
 
         uint256 t0 = block.timestamp;
         vm.warp(t0 + 5);
         vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.CooldownNotElapsed.selector, t0 + 20, t0 + 5));
-        pool.swap(address(hook), trader, 10);
+        caller.swapViaPool(address(pool), address(hook), 10);
     }
 
     function testDefaultsAppliedWhenNoPolicy() public {
-        pool.swap(address(hook), trader, 50);
+        caller.swapViaPool(address(pool), address(hook), 50);
         vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.MaxSwapExceeded.selector, 100, 150));
-        pool.swap(address(hook), trader, 150);
+        caller.swapViaPool(address(pool), address(hook), 150);
+    }
+
+    function testHookPermissionsDeclaration() public view {
+        Hooks.Permissions memory p = hook.getHookPermissions();
+        assertTrue(p.beforeSwap, "beforeSwap permission should be enabled");
+        assertTrue(!p.afterSwap, "afterSwap permission should be disabled");
+        assertTrue(!p.beforeSwapReturnDelta, "beforeSwapReturnDelta should be disabled");
+    }
+
+    function testValidateHookAddressRevertsForNonFlaggedAddress() public {
+        vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, address(hook)));
+        hook.validateHookAddress();
     }
 }
