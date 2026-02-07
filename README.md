@@ -1,66 +1,102 @@
-## Foundry
+# UniswapExeGuard
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+UniswapExeGuard is a policy enforcement layer for Uniswap v4-style execution. It uses an on-chain hook (`beforeSwap`) to enforce per-trader execution rules, with policies configured via ENS names.
 
-Foundry consists of:
+## What It Does
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- Enforces max trade size per trader (`maxSwapAbs`)
+- Enforces cooldowns between swaps (`cooldownSeconds`)
+- Uses ENS to map human-readable names to addresses at setup time
+- Applies safe defaults for traders without policies
 
-## Documentation
+## Contracts
 
-https://book.getfoundry.sh/
+- `src/PolicyRegistry.sol`
+  - Stores per-address policies
+  - Resolves ENS names to addresses at setup time
+  - Exposes `getPolicy(address)` for hooks
 
-## Usage
+- `src/UniswapExeGuard.sol`
+  - Hook that enforces policies in `beforeSwap`
+  - Emits audit events for allowed/blocked swaps
+  - Applies global defaults if no policy exists
 
-### Build
+- `src/ENS.sol`
+  - ENS interfaces + namehash helper
 
-```shell
-$ forge build
-```
+## Tests
 
-### Test
+Tests are in `test/UniswapExeGuard.t.sol` and include:
 
-```shell
-$ forge test
-```
+- ENS name resolution and policy storage
+- Allowed swap within limits
+- Reverts on max swap violation
+- Reverts on cooldown violation
+- Defaults applied for missing policies
 
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
+## Build
 
 ```shell
-$ anvil
+forge build
 ```
 
-### Deploy
+## Test
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+forge test
 ```
 
-### Cast
+## Deploy (Testnet)
+
+Set environment variables:
 
 ```shell
-$ cast <subcommand>
+export PRIVATE_KEY=<deployer_private_key>
+export ENS_REGISTRY=<ens_registry_address>
+export POOL_MANAGER=<uniswap_v4_pool_manager_address>
+export DEFAULT_MAX_SWAP_ABS=<optional_uint>
+export DEFAULT_COOLDOWN_SECONDS=<optional_uint>
 ```
 
-### Help
+Run:
 
 ```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+make deploy RPC_URL=<your_rpc_url>
 ```
+
+## Demo (Local TxIDs)
+
+Run Anvil in one terminal:
+
+```shell
+make demo-anvil
+```
+
+In another terminal:
+
+```shell
+export PRIVATE_KEY=<anvil_private_key>
+export DEMO_TRADER=<optional_trader_address>
+
+make demo RPC_URL=http://127.0.0.1:8545
+```
+
+This produces broadcast transactions for:
+
+- Deployment/setup
+- Allowed swap attempt
+- Blocked swap attempt (policy violation)
+
+Check the printed transaction hashes and `SwapExecutor.SwapAttempt` event results in the broadcast output.
+
+## Demo Flow (Expected)
+
+- Configure policy for `alice.eth` via `PolicyRegistry.setPolicyForENS`
+- Swap via the pool manager and observe:
+  - Allowed swap emits `SwapAllowed`
+  - Violations revert with `MaxSwapExceeded` or `CooldownNotElapsed`
+
+## Notes
+
+- ENS resolution happens only at policy setup time
+- No UI dependencies; deterministic behavior
