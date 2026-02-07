@@ -91,7 +91,6 @@ In another terminal:
 
 ```shell
 export PRIVATE_KEY=<anvil_private_key>
-export DEMO_TRADER=<optional_trader_address>
 
 make demo RPC_URL=http://127.0.0.1:8545
 ```

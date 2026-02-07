@@ -11,8 +11,6 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 
 contract UniswapExeGuard is BaseHook, Ownable {
-    using Hooks for IHooks;
-
     PolicyRegistry public immutable registry;
 
     uint256 public defaultMaxSwapAbs;
@@ -31,11 +29,6 @@ contract UniswapExeGuard is BaseHook, Ownable {
     uint8 private constant REASON_MAX_SWAP = 1;
     uint8 private constant REASON_COOLDOWN = 2;
     uint8 private constant REASON_INVALID_AMOUNT = 3;
-
-    struct EffectivePolicy {
-        uint256 maxSwapAbs;
-        uint256 cooldownSeconds;
-    }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory permissions) {
         permissions = Hooks.Permissions({
@@ -59,7 +52,7 @@ contract UniswapExeGuard is BaseHook, Ownable {
     /// @notice Validates that this deployed address encodes the required hook permission bits.
     /// Reverts with `Hooks.HookAddressNotValid` when deployed at an invalid address.
     function validateHookAddress() external view {
-        IHooks(address(this)).validateHookPermissions(getHookPermissions());
+        Hooks.validateHookPermissions(IHooks(address(this)), getHookPermissions());
     }
 
     constructor(
@@ -93,30 +86,29 @@ contract UniswapExeGuard is BaseHook, Ownable {
         }
 
         uint256 absAmount = amountSpecified < 0 ? uint256(-amountSpecified) : uint256(amountSpecified);
+        (uint256 maxSwapAbs, uint256 cooldownSeconds) = _policyFor(trader);
 
-        EffectivePolicy memory policy = _effectivePolicy(trader);
-
-        if (policy.maxSwapAbs > 0 && absAmount > policy.maxSwapAbs) {
+        if (maxSwapAbs > 0 && absAmount > maxSwapAbs) {
             emit SwapBlocked(trader, REASON_MAX_SWAP, amountSpecified);
-            revert MaxSwapExceeded(policy.maxSwapAbs, absAmount);
+            revert MaxSwapExceeded(maxSwapAbs, absAmount);
         }
 
         uint256 last = lastSwapTimestamp[trader];
-        if (policy.cooldownSeconds > 0 && last != 0 && block.timestamp < last + policy.cooldownSeconds) {
+        if (cooldownSeconds > 0 && last != 0 && block.timestamp < last + cooldownSeconds) {
             emit SwapBlocked(trader, REASON_COOLDOWN, amountSpecified);
-            revert CooldownNotElapsed(last + policy.cooldownSeconds, block.timestamp);
+            revert CooldownNotElapsed(last + cooldownSeconds, block.timestamp);
         }
 
         lastSwapTimestamp[trader] = block.timestamp;
-        emit SwapAllowed(trader, amountSpecified, policy.maxSwapAbs, policy.cooldownSeconds);
+        emit SwapAllowed(trader, amountSpecified, maxSwapAbs, cooldownSeconds);
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    function _effectivePolicy(address trader) internal view returns (EffectivePolicy memory policy) {
-        (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists) = registry.getPolicy(trader);
-        if (!exists) {
-            return EffectivePolicy({maxSwapAbs: defaultMaxSwapAbs, cooldownSeconds: defaultCooldownSeconds});
+    function _policyFor(address trader) internal view returns (uint256 maxSwapAbs, uint256 cooldownSeconds) {
+        bool hasCustomPolicy;
+        (maxSwapAbs, cooldownSeconds, hasCustomPolicy) = registry.getPolicy(trader);
+        if (!hasCustomPolicy) {
+            return (defaultMaxSwapAbs, defaultCooldownSeconds);
         }
-        return EffectivePolicy({maxSwapAbs: maxSwapAbs, cooldownSeconds: cooldownSeconds});
     }
 }

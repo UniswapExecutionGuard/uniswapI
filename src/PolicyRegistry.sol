@@ -26,16 +26,11 @@ contract PolicyRegistry is Ownable {
     }
 
     function setPolicy(address trader, uint256 maxSwapAbs, uint256 cooldownSeconds) external onlyOwner {
-        require(trader != address(0), "TRADER_ZERO");
-        policies[trader] = Policy(maxSwapAbs, cooldownSeconds, true);
-        emit PolicySet(trader, maxSwapAbs, cooldownSeconds);
+        _setPolicy(trader, maxSwapAbs, cooldownSeconds, "TRADER_ZERO");
     }
 
     function setPolicyForENS(string calldata name, uint256 maxSwapAbs, uint256 cooldownSeconds) external onlyOwner {
-        address trader = resolveENS(name);
-        require(trader != address(0), "ENS_UNRESOLVED");
-        policies[trader] = Policy(maxSwapAbs, cooldownSeconds, true);
-        emit PolicySet(trader, maxSwapAbs, cooldownSeconds);
+        _setPolicy(resolveENS(name), maxSwapAbs, cooldownSeconds, "ENS_UNRESOLVED");
     }
 
     function clearPolicy(address trader) external onlyOwner {
@@ -58,5 +53,11 @@ contract PolicyRegistry is Ownable {
         address resolver = ens.resolver(node);
         if (resolver == address(0)) return address(0);
         return address(IAddrResolver(resolver).addr(node));
+    }
+
+    function _setPolicy(address trader, uint256 maxSwapAbs, uint256 cooldownSeconds, string memory zeroError) internal {
+        require(trader != address(0), zeroError);
+        policies[trader] = Policy(maxSwapAbs, cooldownSeconds, true);
+        emit PolicySet(trader, maxSwapAbs, cooldownSeconds);
     }
 }

@@ -10,7 +10,6 @@ import {MockENSRegistry, MockENSResolver, MockPoolManager, SwapExecutor} from ".
 contract DemoFlow is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address trader = vm.envOr("DEMO_TRADER", address(0xBEEF));
 
         vm.startBroadcast(deployerKey);
 
@@ -40,7 +39,6 @@ contract DemoFlow is Script {
         console2.log("UniswapExeGuard:", address(hook));
         console2.log("PoolManager:", address(poolManager));
         console2.log("SwapExecutor:", address(executor));
-        console2.log("Trader:", trader);
         console2.log("Check broadcast logs for tx hashes and SwapExecutor.SwapAttempt events");
     }
 }

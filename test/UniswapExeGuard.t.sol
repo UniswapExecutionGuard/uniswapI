@@ -22,10 +22,6 @@ contract TestUtils {
         require(a == b, err);
     }
 
-    function assertEq(address a, address b, string memory err) internal pure {
-        require(a == b, err);
-    }
-
     function assertTrue(bool v, string memory err) internal pure {
         require(v, err);
     }
