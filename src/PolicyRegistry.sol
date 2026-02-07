@@ -22,9 +22,9 @@ contract PolicyRegistry is Ownable {
     error EnsUnresolved();
 
     struct Policy {
-        uint256 maxSwapAbs; //maximum absolute value allowed in a swap, default value=0
-        uint256 cooldownSeconds; //minimum seconds between swaps for the trader, default value=0
-        bool exists; //default value=false means no policy and default values apply
+        uint256 maxSwapAbs; //maximum absolute value allowed in a swap 
+        uint256 cooldownSeconds; //minimum seconds between swaps for the trader
+        bool exists; //default value=false means no policy
     }
 
     ENS private immutable ens;
