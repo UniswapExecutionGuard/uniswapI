@@ -73,6 +73,10 @@ Important Uniswap v4 hook deployment constraint:
 - Hook behavior is selected by permission bits encoded in the hook contract address.
 - This guard enables `beforeSwap`, so the deployed hook address must include the `BEFORE_SWAP` flag bits.
 - `validateHookAddress()` reverts if the current deployment address does not match declared permissions.
+- `script/DeployUniswapExeGuard.s.sol` handles this automatically by:
+  - deploying a small CREATE2 factory
+  - mining a salt whose predicted hook address has the correct `beforeSwap` flag bits
+  - deploying the hook with CREATE2 and validating via `validateHookAddress()`
 
 ### Sepolia Account-Based Deploy (Interactive Wallet)
 
