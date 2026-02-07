@@ -10,15 +10,18 @@ import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 
 abstract contract BaseHook is IHooks {
     IPoolManager public immutable poolManager;
+
     error HookNotImplemented();
+    error PmZero();
+    error NotPoolManager();
 
     constructor(address _poolManager) {
-        require(_poolManager != address(0), "PM_ZERO");
+        require(_poolManager != address(0), PmZero());
         poolManager = IPoolManager(_poolManager);
     }
 
     modifier onlyPoolManager() {
-        require(msg.sender == address(poolManager), "NOT_POOL_MANAGER");
+        require(msg.sender == address(poolManager), NotPoolManager());
         _;
     }
 
