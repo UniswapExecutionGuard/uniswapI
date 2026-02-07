@@ -89,6 +89,8 @@ contract UniswapExeGuard is BaseHook, Ownable {
             revert AmountSpecifiedInvalid();
         }
 
+        // Safe cast: int256.min is rejected above; remaining values convert to uint256 safely.
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint256 absAmount = amountSpecified < 0 ? uint256(-amountSpecified) : uint256(amountSpecified);
         (uint256 maxSwapAbs, uint256 cooldownSeconds) = _policyFor(trader);
 
