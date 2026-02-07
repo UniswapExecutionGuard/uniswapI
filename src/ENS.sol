@@ -2,6 +2,9 @@
 pragma solidity ^0.8.24;
 
 library ENSNamehash {
+    /// @notice Computes ENS namehash for a fully-qualified name like "alice.eth".
+    /// @dev ENS namehash is recursive: hash(parentNode, keccak256(label)),
+    /// so labels are applied from right to left (TLD -> subdomain).
     function namehash(string memory name) internal pure returns (bytes32) {
         bytes memory b = bytes(name);
         bytes32 node;
@@ -23,6 +26,7 @@ library ENSNamehash {
         return node;
     }
 
+    /// @dev Returns keccak256 hash of a single label slice [start, end).
     function _labelhash(bytes memory data, uint256 start, uint256 end) private pure returns (bytes32 hash) {
         bytes memory out = new bytes(end - start);
         for (uint256 j = start; j < end; j++) {
