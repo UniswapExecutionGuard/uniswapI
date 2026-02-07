@@ -23,7 +23,7 @@ contract UniswapExeGuard is BaseHook, Ownable {
     error AmountSpecifiedInvalid();
     error MaxSwapExceeded(uint256 maxAllowed, uint256 attempted);
     error CooldownNotElapsed(uint256 nextAllowedTime, uint256 currentTime);
-    error PolicyRegistryZero(); 
+    error PolicyRegistryZero();
 
     event SwapAllowed(address indexed trader, int256 amountSpecified, uint256 maxSwapAbs, uint256 cooldownSeconds);
     event SwapBlocked(address indexed trader, uint8 reason, int256 amountSpecified);
