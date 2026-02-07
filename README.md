@@ -1,6 +1,6 @@
 # UniswapExeGuard
 
-UniswapExeGuard is a policy enforcement layer for Uniswap v4-style execution. It uses an on-chain hook (`beforeSwap`) to enforce per-trader execution rules, with policies configured via ENS names.
+UniswapExeGuard demonstrates how Uniswap v4 hooks can be used to embed execution rules directly into a liquidity pool's swap lifecycle. It implements a `beforeSwap` hook that enforces deterministic, pool-level execution policies (e.g. trade size limits and cooldowns), enabling new market structures that are not possible in earlier Uniswap versions.
 
 ## Upstream Dependencies
 
@@ -12,8 +12,8 @@ This repo consumes those packages from `lib/` and uses official interfaces/types
 
 ## What It Does
 
-- Enforces max trade size per trader (`maxSwapAbs`)
-- Enforces cooldowns between swaps (`cooldownSeconds`)
+- Enforces maximum trade size per trader at swap execution time (`maxSwapAbs`)
+- Rate-limits order flow via mandatory cooldowns between swaps (`cooldownSeconds`)
 - Uses ENS to map human-readable names to addresses at setup time
 - Applies safe defaults for traders without policies
 
@@ -25,7 +25,8 @@ This repo consumes those packages from `lib/` and uses official interfaces/types
   - Exposes `getPolicy(address)` for hooks
 
 - `src/UniswapExeGuard.sol`
-  - Hook that enforces policies in `beforeSwap`
+  - Uniswap v4 hook that enforces policies in `beforeSwap`
+  - Execution rules are enforced as part of the pool's swap lifecycle
   - Emits audit events for allowed/blocked swaps
   - Applies global defaults if no policy exists
   - Declares `Hooks.Permissions` and includes `validateHookAddress()`
@@ -107,10 +108,12 @@ Check the printed transaction hashes and `SwapExecutor.SwapAttempt` event result
 
 - Configure policy for `alice.eth` via `PolicyRegistry.setPolicyForENS`
 - Swap via the pool manager and observe (policy is evaluated for the swap caller/sender):
-  - Allowed swap emits `SwapAllowed`
+  - Allowed swap emits `SwapAllowed` audit events
+  - Policy violations emit `SwapBlocked` audit events with reason
   - Violations revert with `MaxSwapExceeded` or `CooldownNotElapsed`
 
 ## Notes
 
 - ENS resolution happens only at policy setup time
 - No UI dependencies; deterministic behavior
+- Execution rules are enforced by the Uniswap v4 PoolManager, not by off-chain logic (main point!)
