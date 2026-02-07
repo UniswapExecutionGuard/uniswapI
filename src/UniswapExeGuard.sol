@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {BaseHook} from "./BaseHook.sol";
 import {PolicyRegistry} from "./PolicyRegistry.sol";
 import {Ownable} from "./Ownable.sol";
+import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
+import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
 
 contract UniswapExeGuard is BaseHook, Ownable {
     PolicyRegistry public immutable registry;
@@ -25,6 +29,11 @@ contract UniswapExeGuard is BaseHook, Ownable {
     uint8 private constant REASON_COOLDOWN = 2;
     uint8 private constant REASON_INVALID_AMOUNT = 3;
 
+    struct EffectivePolicy {
+        uint256 maxSwapAbs;
+        uint256 cooldownSeconds;
+    }
+
     constructor(
         address poolManager,
         address policyRegistry,
@@ -43,7 +52,13 @@ contract UniswapExeGuard is BaseHook, Ownable {
         emit DefaultsUpdated(_defaultMaxSwapAbs, _defaultCooldownSeconds);
     }
 
-    function beforeSwap(address trader, int256 amountSpecified) external onlyPoolManager {
+    function beforeSwap(address trader, PoolKey calldata, IPoolManager.SwapParams calldata params, bytes calldata)
+        external
+        override
+        onlyPoolManager
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        int256 amountSpecified = params.amountSpecified;
         if (amountSpecified == type(int256).min) {
             emit SwapBlocked(trader, REASON_INVALID_AMOUNT, amountSpecified);
             revert AmountSpecifiedInvalid();
@@ -51,24 +66,29 @@ contract UniswapExeGuard is BaseHook, Ownable {
 
         uint256 absAmount = amountSpecified < 0 ? uint256(-amountSpecified) : uint256(amountSpecified);
 
-        (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists) = registry.getPolicy(trader);
-        if (!exists) {
-            maxSwapAbs = defaultMaxSwapAbs;
-            cooldownSeconds = defaultCooldownSeconds;
-        }
+        EffectivePolicy memory policy = _effectivePolicy(trader);
 
-        if (maxSwapAbs > 0 && absAmount > maxSwapAbs) {
+        if (policy.maxSwapAbs > 0 && absAmount > policy.maxSwapAbs) {
             emit SwapBlocked(trader, REASON_MAX_SWAP, amountSpecified);
-            revert MaxSwapExceeded(maxSwapAbs, absAmount);
+            revert MaxSwapExceeded(policy.maxSwapAbs, absAmount);
         }
 
         uint256 last = lastSwapTimestamp[trader];
-        if (cooldownSeconds > 0 && last != 0 && block.timestamp < last + cooldownSeconds) {
+        if (policy.cooldownSeconds > 0 && last != 0 && block.timestamp < last + policy.cooldownSeconds) {
             emit SwapBlocked(trader, REASON_COOLDOWN, amountSpecified);
-            revert CooldownNotElapsed(last + cooldownSeconds, block.timestamp);
+            revert CooldownNotElapsed(last + policy.cooldownSeconds, block.timestamp);
         }
 
         lastSwapTimestamp[trader] = block.timestamp;
-        emit SwapAllowed(trader, amountSpecified, maxSwapAbs, cooldownSeconds);
+        emit SwapAllowed(trader, amountSpecified, policy.maxSwapAbs, policy.cooldownSeconds);
+        return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    function _effectivePolicy(address trader) internal view returns (EffectivePolicy memory policy) {
+        (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists) = registry.getPolicy(trader);
+        if (!exists) {
+            return EffectivePolicy({maxSwapAbs: defaultMaxSwapAbs, cooldownSeconds: defaultCooldownSeconds});
+        }
+        return EffectivePolicy({maxSwapAbs: maxSwapAbs, cooldownSeconds: cooldownSeconds});
     }
 }

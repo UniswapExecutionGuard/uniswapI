@@ -2,6 +2,14 @@
 
 UniswapExeGuard is a policy enforcement layer for Uniswap v4-style execution. It uses an on-chain hook (`beforeSwap`) to enforce per-trader execution rules, with policies configured via ENS names.
 
+## Upstream Dependencies
+
+- ENS contracts: `https://github.com/ensdomains/ens-contracts`
+- Uniswap v4 core: `https://github.com/Uniswap/v4-core`
+- Uniswap v4 periphery: `https://github.com/Uniswap/v4-periphery`
+
+This repo consumes those packages from `lib/` and uses official interfaces/types in the contracts.
+
 ## What It Does
 
 - Enforces max trade size per trader (`maxSwapAbs`)

@@ -1,13 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-interface IENSRegistry {
-    function resolver(bytes32 node) external view returns (address);
-}
-
-interface IENSResolver {
-    function addr(bytes32 node) external view returns (address);
-}
+pragma solidity ^0.8.24;
 
 library ENSNamehash {
     function namehash(string memory name) internal pure returns (bytes32) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {ENSNamehash} from "../src/ENS.sol";
@@ -23,7 +23,7 @@ contract DemoFlow is Script {
 
         bytes32 node = ENSNamehash.namehash("alice.eth");
         ens.setResolver(node, address(resolver));
-        resolver.setAddr(node, trader);
+        resolver.setAddr(node, payable(trader));
 
         registry.setPolicyForENS("alice.eth", 100, 30);
 

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
-import {IENSRegistry, IENSResolver, ENSNamehash} from "./ENS.sol";
+import {ENS} from "../lib/ens-contracts/contracts/registry/ENS.sol";
+import {IAddrResolver} from "../lib/ens-contracts/contracts/resolvers/profiles/IAddrResolver.sol";
+import {ENSNamehash} from "./ENS.sol";
 import {Ownable} from "./Ownable.sol";
 
 contract PolicyRegistry is Ownable {
@@ -11,7 +13,7 @@ contract PolicyRegistry is Ownable {
         bool exists;
     }
 
-    IENSRegistry public immutable ens;
+    ENS public immutable ens;
 
     mapping(address => Policy) private policies;
 
@@ -20,7 +22,7 @@ contract PolicyRegistry is Ownable {
 
     constructor(address ensRegistry) {
         require(ensRegistry != address(0), "ENS_ZERO");
-        ens = IENSRegistry(ensRegistry);
+        ens = ENS(ensRegistry);
     }
 
     function setPolicy(address trader, uint256 maxSwapAbs, uint256 cooldownSeconds) external onlyOwner {
@@ -51,6 +53,6 @@ contract PolicyRegistry is Ownable {
         bytes32 node = ENSNamehash.namehash(name);
         address resolver = ens.resolver(node);
         if (resolver == address(0)) return address(0);
-        return IENSResolver(resolver).addr(node);
+        return address(IAddrResolver(resolver).addr(node));
     }
 }
