@@ -58,14 +58,14 @@ forge test
 
 ## Deploy (Testnet)
 
-Set environment variables:
+Set values in `.env`:
 
 ```shell
-export PRIVATE_KEY=<deployer_private_key>
-export ENS_REGISTRY=<ens_registry_address>
-export POOL_MANAGER=<uniswap_v4_pool_manager_address>
-export DEFAULT_MAX_SWAP_ABS=<optional_uint>
-export DEFAULT_COOLDOWN_SECONDS=<optional_uint>
+SEPOLIA_RPC_URL=<your_sepolia_rpc_url>
+ENS_REGISTRY=<ens_registry_address>
+POOL_MANAGER=<uniswap_v4_pool_manager_address>
+DEFAULT_MAX_SWAP_ABS=<optional_uint>
+DEFAULT_COOLDOWN_SECONDS=<optional_uint>
 ```
 
 Important Uniswap v4 hook deployment constraint:
@@ -74,26 +74,44 @@ Important Uniswap v4 hook deployment constraint:
 - This guard enables `beforeSwap`, so the deployed hook address must include the `BEFORE_SWAP` flag bits.
 - `validateHookAddress()` reverts if the current deployment address does not match declared permissions.
 
-Run:
+### Sepolia Account-Based Deploy (Interactive Wallet)
+
+Import a deployer account once:
 
 ```shell
-make deploy RPC_URL=<your_rpc_url>
+make sepolia-import ACCOUNT=sepolia-deployer
 ```
 
+Create a `.password` file (same password used for the imported cast wallet), then deploy:
+
+```shell
+make sepolia-deploy
+```
+
+This uses:
+
+- `SEPOLIA_RPC_URL` from `.env`
+- `ENS_REGISTRY` and `POOL_MANAGER` from `.env`
+- `ACCOUNT` and `PASSWORD_FILE` from `Makefile` defaults (override if needed)
+
 ## Demo (Local TxIDs)
+
+Set Anvil key in `.env`:
+
+```shell
+PRIVATE_KEY_ANVIL=<anvil_private_key>
+```
 
 Run Anvil in one terminal:
 
 ```shell
-make demo-anvil
+make local-node
 ```
 
 In another terminal:
 
 ```shell
-export PRIVATE_KEY=<anvil_private_key>
-
-make demo RPC_URL=http://127.0.0.1:8545
+make local-demo
 ```
 
 This produces broadcast transactions for:

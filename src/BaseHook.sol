@@ -7,7 +7,12 @@ import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
 import {BeforeSwapDelta} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-
+/**
+ * @title BaseHook
+ * @author Narges H
+ * @notice Abstract base contract for Uniswap v4 hooks.
+ * It implements the IHooks interface and provides a default implementation that reverts for all hook functions.
+ */
 abstract contract BaseHook is IHooks {
     IPoolManager public immutable poolManager;
 
