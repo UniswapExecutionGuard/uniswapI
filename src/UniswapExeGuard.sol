@@ -7,10 +7,14 @@ import {Ownable} from "../lib/v4-core/lib/openzeppelin-contracts/contracts/acces
 import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
+import {IMsgSender} from "../lib/v4-periphery/src/interfaces/IMsgSender.sol";
 
 contract UniswapExeGuard is BaseHook, Ownable {
+    using PoolIdLibrary for PoolKey;
+
     PolicyRegistry public immutable registry;
 
     // Default values when trader-specific policies are absent in PolicyRegistry.
@@ -18,16 +22,20 @@ contract UniswapExeGuard is BaseHook, Ownable {
     uint256 public defaultMaxSwapAbs;
     uint256 public defaultCooldownSeconds;
 
-    mapping(address => uint256) public lastSwapTimestamp;
+    mapping(address => bool) public trustedMsgSenderProviders;
+    // Cooldown is enforced per trader per pool (not globally across all pools).
+    mapping(address => mapping(bytes32 => uint256)) public lastSwapTimestampByPool;
 
     error AmountSpecifiedInvalid();
     error MaxSwapExceeded(uint256 maxAllowed, uint256 attempted);
     error CooldownNotElapsed(uint256 nextAllowedTime, uint256 currentTime);
     error PolicyRegistryZero();
+    error ProviderZeroAddress();
 
     event SwapAllowed(address indexed trader, int256 amountSpecified, uint256 maxSwapAbs, uint256 cooldownSeconds);
     event SwapBlocked(address indexed trader, uint8 reason, int256 amountSpecified);
     event DefaultsUpdated(uint256 defaultMaxSwapAbs, uint256 defaultCooldownSeconds);
+    event TrustedMsgSenderProviderUpdated(address indexed provider, bool trusted);
 
     //using constants for readability and gas efficiency in event logs
     uint8 private constant REASON_MAX_SWAP = 1;
@@ -77,36 +85,46 @@ contract UniswapExeGuard is BaseHook, Ownable {
         emit DefaultsUpdated(_defaultMaxSwapAbs, _defaultCooldownSeconds);
     }
 
-    function beforeSwap(address trader, PoolKey calldata, IPoolManager.SwapParams calldata params, bytes calldata)
+    /// @notice Marks a router/periphery contract as trusted to expose end user via IMsgSender.msgSender().
+    function setTrustedMsgSenderProvider(address provider, bool trusted) external onlyOwner {
+        require(provider != address(0), ProviderZeroAddress());
+        trustedMsgSenderProviders[provider] = trusted;
+        emit TrustedMsgSenderProviderUpdated(provider, trusted);
+    }
+
+    function beforeSwap(address trader, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         external
         override
         onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+        address policyTrader = _resolvePolicyTrader(trader);
+        PoolKey memory keyForId = key;
+        bytes32 poolId = PoolId.unwrap(keyForId.toId());
         int256 amountSpecified = params.amountSpecified;
         if (amountSpecified == type(int256).min) {
-            emit SwapBlocked(trader, REASON_INVALID_AMOUNT, amountSpecified);
+            emit SwapBlocked(policyTrader, REASON_INVALID_AMOUNT, amountSpecified);
             revert AmountSpecifiedInvalid();
         }
 
         // Safe cast: int256.min is rejected above; remaining values convert to uint256 safely.
         // forge-lint: disable-next-line(unsafe-typecast)
         uint256 absAmount = amountSpecified < 0 ? uint256(-amountSpecified) : uint256(amountSpecified);
-        (uint256 maxSwapAbs, uint256 cooldownSeconds) = _policyFor(trader);
+        (uint256 maxSwapAbs, uint256 cooldownSeconds) = _policyFor(policyTrader);
 
         if (maxSwapAbs > 0 && absAmount > maxSwapAbs) {
-            emit SwapBlocked(trader, REASON_MAX_SWAP, amountSpecified);
+            emit SwapBlocked(policyTrader, REASON_MAX_SWAP, amountSpecified);
             revert MaxSwapExceeded(maxSwapAbs, absAmount);
         }
 
-        uint256 last = lastSwapTimestamp[trader];
+        uint256 last = lastSwapTimestampByPool[policyTrader][poolId];
         if (cooldownSeconds > 0 && last != 0 && block.timestamp < last + cooldownSeconds) {
-            emit SwapBlocked(trader, REASON_COOLDOWN, amountSpecified);
+            emit SwapBlocked(policyTrader, REASON_COOLDOWN, amountSpecified);
             revert CooldownNotElapsed(last + cooldownSeconds, block.timestamp);
         }
 
-        lastSwapTimestamp[trader] = block.timestamp;
-        emit SwapAllowed(trader, amountSpecified, maxSwapAbs, cooldownSeconds);
+        lastSwapTimestampByPool[policyTrader][poolId] = block.timestamp;
+        emit SwapAllowed(policyTrader, amountSpecified, maxSwapAbs, cooldownSeconds);
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
@@ -116,6 +134,15 @@ contract UniswapExeGuard is BaseHook, Ownable {
         // No custom policy for this trader: enforce defaults.
         if (!hasCustomPolicy) {
             return (defaultMaxSwapAbs, defaultCooldownSeconds);
+        }
+    }
+
+    function _resolvePolicyTrader(address sender) internal view returns (address) {
+        if (!trustedMsgSenderProviders[sender]) return sender;
+        try IMsgSender(sender).msgSender() returns (address originalSender) {
+            return originalSender == address(0) ? sender : originalSender;
+        } catch {
+            return sender;
         }
     }
 }

@@ -9,10 +9,12 @@ import {IAddrResolver} from "../lib/ens-contracts/contracts/resolvers/profiles/I
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
+import {IMsgSender} from "../lib/v4-periphery/src/interfaces/IMsgSender.sol";
 
 interface Vm {
     function warp(uint256) external;
     function expectRevert(bytes calldata) external;
+    function expectRevert() external;
 }
 
 contract TestUtils {
@@ -84,11 +86,72 @@ contract MockPoolManager {
             IPoolManager.SwapParams({zeroForOne: true, amountSpecified: amountSpecified, sqrtPriceLimitX96: 0});
         UniswapExeGuard(hook).beforeSwap(msg.sender, key, params, "");
     }
+
+    function swapWithFee(address hook, int256 amountSpecified, uint24 fee) external {
+        PoolKey memory key;
+        key.fee = fee;
+        IPoolManager.SwapParams memory params =
+            IPoolManager.SwapParams({zeroForOne: true, amountSpecified: amountSpecified, sqrtPriceLimitX96: 0});
+        UniswapExeGuard(hook).beforeSwap(msg.sender, key, params, "");
+    }
 }
 
 contract SwapCaller {
     function swapViaPool(address pool, address hook, int256 amountSpecified) external {
         MockPoolManager(pool).swap(hook, amountSpecified);
+    }
+
+    function swapViaPoolWithFee(address pool, address hook, int256 amountSpecified, uint24 fee) external {
+        MockPoolManager(pool).swapWithFee(hook, amountSpecified, fee);
+    }
+}
+
+contract MockMsgSenderRouter is IMsgSender {
+    address private currentSender;
+
+    function msgSender() external view returns (address) {
+        return currentSender;
+    }
+
+    function swapViaPool(address pool, address hook, int256 amountSpecified) external {
+        currentSender = msg.sender;
+        MockPoolManager(pool).swap(hook, amountSpecified);
+        currentSender = address(0);
+    }
+
+    function swapViaPoolWithFee(address pool, address hook, int256 amountSpecified, uint24 fee) external {
+        currentSender = msg.sender;
+        MockPoolManager(pool).swapWithFee(hook, amountSpecified, fee);
+        currentSender = address(0);
+    }
+}
+
+contract NonOwnerCaller {
+    function callSetPolicy(PolicyRegistry registry, address trader, uint256 maxSwapAbs, uint256 cooldownSeconds)
+        external
+    {
+        registry.setPolicy(trader, maxSwapAbs, cooldownSeconds);
+    }
+
+    function callClearPolicy(PolicyRegistry registry, address trader) external {
+        registry.clearPolicy(trader);
+    }
+
+    function callSetPolicyForENS(
+        PolicyRegistry registry,
+        string calldata name,
+        uint256 maxSwapAbs,
+        uint256 cooldownSeconds
+    ) external {
+        registry.setPolicyForENS(name, maxSwapAbs, cooldownSeconds);
+    }
+
+    function callSetDefaults(UniswapExeGuard hook, uint256 maxSwapAbs, uint256 cooldownSeconds) external {
+        hook.setDefaults(maxSwapAbs, cooldownSeconds);
+    }
+
+    function callSetTrustedProvider(UniswapExeGuard hook, address provider, bool trusted) external {
+        hook.setTrustedMsgSenderProvider(provider, trusted);
     }
 }
 
@@ -145,6 +208,21 @@ contract UniswapExeGuardTest is TestUtils {
         caller.swapViaPool(address(pool), address(hook), 10);
     }
 
+    function testCooldownIsPoolSpecific() public {
+        registry.setPolicy(address(caller), 0, 20);
+
+        caller.swapViaPoolWithFee(address(pool), address(hook), 10, 3000);
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 5);
+
+        // Different pool fee => different pool id, so cooldown should not block this swap.
+        caller.swapViaPoolWithFee(address(pool), address(hook), 10, 500);
+
+        // Same pool as the first swap should still be in cooldown.
+        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.CooldownNotElapsed.selector, t0 + 20, t0 + 5));
+        caller.swapViaPoolWithFee(address(pool), address(hook), 10, 3000);
+    }
+
     function testDefaultsAppliedWhenNoPolicy() public {
         caller.swapViaPool(address(pool), address(hook), 50);
         vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.MaxSwapExceeded.selector, 100, 150));
@@ -161,5 +239,55 @@ contract UniswapExeGuardTest is TestUtils {
     function testValidateHookAddressRevertsForNonFlaggedAddress() public {
         vm.expectRevert(abi.encodeWithSelector(Hooks.HookAddressNotValid.selector, address(hook)));
         hook.validateHookAddress();
+    }
+
+    function testRevertWhenENSUnresolved() public {
+        vm.expectRevert(abi.encodeWithSelector(PolicyRegistry.EnsUnresolved.selector));
+        registry.setPolicyForENS("unknown.eth", 100, 10);
+    }
+
+    function testRevertWhenAmountSpecifiedIsMinInt() public {
+        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.AmountSpecifiedInvalid.selector));
+        caller.swapViaPool(address(pool), address(hook), type(int256).min);
+    }
+
+    function testTrustedMsgSenderProviderUsesOriginalCallerPolicy() public {
+        MockMsgSenderRouter router = new MockMsgSenderRouter();
+
+        // Router has a strict policy; original caller has a loose policy.
+        registry.setPolicy(address(router), 60, 0);
+        registry.setPolicy(address(this), 200, 0);
+
+        // Untrusted router: policy applies to router address, so this swap is blocked.
+        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.MaxSwapExceeded.selector, 60, 100));
+        router.swapViaPool(address(pool), address(hook), 100);
+
+        // Trusted router: policy applies to original caller via IMsgSender.msgSender().
+        hook.setTrustedMsgSenderProvider(address(router), true);
+        router.swapViaPool(address(pool), address(hook), 100);
+    }
+
+    function testRevertWhenTrustedMsgSenderProviderIsZero() public {
+        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.ProviderZeroAddress.selector));
+        hook.setTrustedMsgSenderProvider(address(0), true);
+    }
+
+    function testRevertWhenNonOwnerCallsAdminFunctions() public {
+        NonOwnerCaller attacker = new NonOwnerCaller();
+
+        vm.expectRevert();
+        attacker.callSetPolicy(registry, address(caller), 10, 10);
+
+        vm.expectRevert();
+        attacker.callClearPolicy(registry, address(caller));
+
+        vm.expectRevert();
+        attacker.callSetPolicyForENS(registry, "alice.eth", 10, 10);
+
+        vm.expectRevert();
+        attacker.callSetDefaults(hook, 10, 10);
+
+        vm.expectRevert();
+        attacker.callSetTrustedProvider(hook, address(caller), true);
     }
 }

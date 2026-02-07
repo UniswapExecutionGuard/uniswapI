@@ -13,7 +13,7 @@ This repo consumes those packages from `lib/` and uses official interfaces/types
 ## What It Does
 
 - Enforces maximum trade size per trader at swap execution time (`maxSwapAbs`)
-- Rate-limits order flow via mandatory cooldowns between swaps (`cooldownSeconds`)
+- Rate-limits order flow via mandatory cooldowns between swaps (`cooldownSeconds`) per trader per pool
 - Uses ENS to map human-readable names to addresses at setup time
 - Applies safe defaults for traders without policies
 
@@ -123,6 +123,8 @@ This produces broadcast transactions for:
 - Deployment/setup
 - Allowed swap attempt
 - Blocked swap attempt (policy violation)
+
+The demo script deploys the hook via CREATE2 with mined salt, so `beforeSwap` permission bits are valid there as well.
 
 Check the printed transaction hashes and `SwapExecutor.SwapAttempt` event results in the broadcast output.
 
