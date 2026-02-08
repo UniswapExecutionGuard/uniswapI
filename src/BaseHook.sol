@@ -22,12 +22,12 @@ abstract contract BaseHook is IHooks {
     error NotPoolManager();
 
     constructor(address _poolManager) {
-        require(_poolManager != address(0), PmZero());
+        if (_poolManager == address(0)) revert PmZero();
         poolManager = IPoolManager(_poolManager);
     }
 
     modifier onlyPoolManager() {
-        require(msg.sender == address(poolManager), NotPoolManager());
+        if (msg.sender != address(poolManager)) revert NotPoolManager();
         _;
     }
 

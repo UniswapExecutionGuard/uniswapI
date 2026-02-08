@@ -9,7 +9,6 @@ import {IAddrResolver} from "../lib/ens-contracts/contracts/resolvers/profiles/I
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {IMsgSender} from "../lib/v4-periphery/src/interfaces/IMsgSender.sol";
 
 interface Vm {
     function warp(uint256) external;
@@ -106,26 +105,6 @@ contract SwapCaller {
     }
 }
 
-contract MockMsgSenderRouter is IMsgSender {
-    address private currentSender;
-
-    function msgSender() external view returns (address) {
-        return currentSender;
-    }
-
-    function swapViaPool(address pool, address hook, int256 amountSpecified) external {
-        currentSender = msg.sender;
-        MockPoolManager(pool).swap(hook, amountSpecified);
-        currentSender = address(0);
-    }
-
-    function swapViaPoolWithFee(address pool, address hook, int256 amountSpecified, uint24 fee) external {
-        currentSender = msg.sender;
-        MockPoolManager(pool).swapWithFee(hook, amountSpecified, fee);
-        currentSender = address(0);
-    }
-}
-
 contract NonOwnerCaller {
     function callSetPolicy(PolicyRegistry registry, address trader, uint256 maxSwapAbs, uint256 cooldownSeconds)
         external
@@ -148,10 +127,6 @@ contract NonOwnerCaller {
 
     function callSetDefaults(UniswapExeGuard hook, uint256 maxSwapAbs, uint256 cooldownSeconds) external {
         hook.setDefaults(maxSwapAbs, cooldownSeconds);
-    }
-
-    function callSetTrustedProvider(UniswapExeGuard hook, address provider, bool trusted) external {
-        hook.setTrustedMsgSenderProvider(provider, trusted);
     }
 }
 
@@ -185,6 +160,19 @@ contract UniswapExeGuardTest is TestUtils {
         assertTrue(exists, "policy missing");
         assertEq(maxSwapAbs, 500, "maxSwapAbs wrong");
         assertEq(cooldownSeconds, 15, "cooldown wrong");
+    }
+
+    function testSetPolicyForNode() public {
+        bytes32 node = ENSNamehash.namehash("alice.eth");
+        ens.setResolver(node, address(resolver));
+        resolver.setAddr(node, payable(trader));
+
+        registry.setPolicyForNode(node, 700, 25);
+
+        (uint256 maxSwapAbs, uint256 cooldownSeconds, bool exists) = registry.getPolicy(trader);
+        assertTrue(exists, "policy missing");
+        assertEq(maxSwapAbs, 700, "maxSwapAbs wrong");
+        assertEq(cooldownSeconds, 25, "cooldown wrong");
     }
 
     function testAllowedSwapWithinLimits() public {
@@ -251,27 +239,6 @@ contract UniswapExeGuardTest is TestUtils {
         caller.swapViaPool(address(pool), address(hook), type(int256).min);
     }
 
-    function testTrustedMsgSenderProviderUsesOriginalCallerPolicy() public {
-        MockMsgSenderRouter router = new MockMsgSenderRouter();
-
-        // Router has a strict policy; original caller has a loose policy.
-        registry.setPolicy(address(router), 60, 0);
-        registry.setPolicy(address(this), 200, 0);
-
-        // Untrusted router: policy applies to router address, so this swap is blocked.
-        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.MaxSwapExceeded.selector, 60, 100));
-        router.swapViaPool(address(pool), address(hook), 100);
-
-        // Trusted router: policy applies to original caller via IMsgSender.msgSender().
-        hook.setTrustedMsgSenderProvider(address(router), true);
-        router.swapViaPool(address(pool), address(hook), 100);
-    }
-
-    function testRevertWhenTrustedMsgSenderProviderIsZero() public {
-        vm.expectRevert(abi.encodeWithSelector(UniswapExeGuard.ProviderZeroAddress.selector));
-        hook.setTrustedMsgSenderProvider(address(0), true);
-    }
-
     function testRevertWhenNonOwnerCallsAdminFunctions() public {
         NonOwnerCaller attacker = new NonOwnerCaller();
 
@@ -286,8 +253,5 @@ contract UniswapExeGuardTest is TestUtils {
 
         vm.expectRevert();
         attacker.callSetDefaults(hook, 10, 10);
-
-        vm.expectRevert();
-        attacker.callSetTrustedProvider(hook, address(caller), true);
     }
 }
