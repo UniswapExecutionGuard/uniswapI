@@ -1,5 +1,5 @@
 .PHONY: help build test local-node local-demo sepolia-import sepolia-deploy deploy \
-	ui-config ui-demo sepolia-policy-set sepolia-policy-set-ens sepolia-policy-read sepolia-hook-config sepolia-demo-sequence sepolia-live-swap
+	ui-config ui-pages ui-demo sepolia-policy-set sepolia-policy-set-ens sepolia-policy-read sepolia-hook-config sepolia-demo-sequence sepolia-live-swap
 
 ifneq (,$(wildcard .env))
 include .env
@@ -37,7 +37,8 @@ help:
 	@echo "Password file for sepolia-deploy: $(PASSWORD_FILE)"
 	@echo ""
 	@echo "UI:"
-	@echo "  make ui-config             Generate demo-ui/config.js from .env values"
+	@echo "  make ui-config             Generate demo-ui/config.js and docs/config.js from .env values"
+	@echo "  make ui-pages              Sync demo-ui/ into docs/ for GitHub Pages"
 	@echo "  make ui-demo               Serve demo UI at http://127.0.0.1:4173"
 
 build:
@@ -88,7 +89,7 @@ local-node:
 	anvil --host 127.0.0.1 --port 8545
 
 ui-config:
-	@mkdir -p demo-ui
+	@mkdir -p demo-ui docs
 	@printf '%s\n' \
 	'window.DEMO_UI_CONFIG = {' \
 	'  POLICY_REGISTRY: "$(POLICY_REGISTRY)",' \
@@ -106,8 +107,15 @@ ui-config:
 	'  LIVE_TICK_SPACING: "$(LIVE_TICK_SPACING)",' \
 	'  LIVE_ALLOWED_INPUT: "$(LIVE_ALLOWED_INPUT)",' \
 	'  LIVE_BLOCKED_INPUT: "$(LIVE_BLOCKED_INPUT)"' \
-	'};' > demo-ui/config.js
-	@echo "Wrote demo-ui/config.js from .env"
+	'};' | tee demo-ui/config.js > docs/config.js
+	@echo "Wrote demo-ui/config.js and docs/config.js from .env"
+
+ui-pages: ui-config
+	@mkdir -p docs
+	cp demo-ui/index.html docs/index.html
+	cp demo-ui/app.js docs/app.js
+	cp demo-ui/styles.css docs/styles.css
+	@echo "Synced demo-ui/ -> docs/ for GitHub Pages"
 
 ui-demo: ui-config
 	python3 -m http.server 4173 --directory demo-ui

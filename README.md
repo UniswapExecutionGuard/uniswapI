@@ -183,6 +183,19 @@ make ui-demo
 
 Then open `http://127.0.0.1:4173`.
 
+For GitHub Pages deployment (serving from `docs/`), sync the latest UI first:
+
+```shell
+make ui-pages
+git add docs Makefile README.md
+git commit -m "chore: sync demo-ui to docs for GitHub Pages"
+git push
+```
+
+Pages URL format:
+
+`https://<github-username>.github.io/<repo-name>/`
+
 UI features:
 
 - Connect wallet (MetaMask/Rabby)
@@ -191,7 +204,7 @@ UI features:
 - Set hook defaults
 - Run live swap checks via `PoolSwapTest` (approve tokens, allowed swap, blocked swap)
 - View recent `PolicySet`, `PolicyCleared`, `DefaultsUpdated`, `SwapAllowed`, and `SwapBlocked` events
-- Auto-prefill contract addresses and default values from `.env` via generated `demo-ui/config.js`
+- Auto-prefill contract addresses and default values from `.env` via generated `demo-ui/config.js` and `docs/config.js`
 
 ## Demo Flow (Expected)
 
