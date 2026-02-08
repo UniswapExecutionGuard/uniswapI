@@ -97,6 +97,28 @@ This uses:
 - `SEPOLIA_RPC_URL` from `.env`
 - `ENS_REGISTRY` and `POOL_MANAGER` from `.env`
 - `ACCOUNT` and `PASSWORD_FILE` from `Makefile` defaults (override if needed)
+- `OWNER` is derived automatically from `ACCOUNT` during `make sepolia-deploy` so hook admin calls work after CREATE2 deployment
+
+### Sepolia Demo Scripts
+
+Optional `.env` values for demo interaction scripts:
+
+```shell
+POLICY_REGISTRY=<deployed_policy_registry_address>
+UNISWAP_EXE_GUARD=<deployed_hook_address>
+TRADER=<trader_address_for_demo>
+ENS_NAME=<ens_name_for_demo>
+```
+
+Available commands:
+
+```shell
+make sepolia-policy-set
+make sepolia-policy-set-ens
+make sepolia-policy-read
+make sepolia-hook-config
+make sepolia-demo-sequence
+```
 
 ## Demo (Local TxIDs)
 
@@ -127,6 +149,25 @@ This produces broadcast transactions for:
 The demo script deploys the hook via CREATE2 with mined salt, so `beforeSwap` permission bits are valid there as well.
 
 Check the printed transaction hashes and `SwapExecutor.SwapAttempt` event results in the broadcast output.
+
+## Demo UI
+
+Run:
+
+```shell
+make ui-demo
+```
+
+Then open `http://127.0.0.1:4173`.
+
+UI features:
+
+- Connect wallet (MetaMask/Rabby)
+- Set/read/clear policies in `PolicyRegistry` (address or ENS)
+- Set ENS-based policy
+- Set hook defaults
+- View recent `PolicySet`, `PolicyCleared`, `DefaultsUpdated`, `SwapAllowed`, and `SwapBlocked` events
+- Auto-prefill contract addresses and default values from `.env` via generated `demo-ui/config.js`
 
 ## Demo Flow (Expected)
 

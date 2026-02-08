@@ -1,4 +1,5 @@
-.PHONY: help build test local-node local-demo sepolia-import sepolia-deploy deploy
+.PHONY: help build test local-node local-demo sepolia-import sepolia-deploy deploy \
+	ui-config ui-demo sepolia-policy-set sepolia-policy-set-ens sepolia-policy-read sepolia-hook-config sepolia-demo-sequence
 
 ifneq (,$(wildcard .env))
 include .env
@@ -23,9 +24,19 @@ help:
 	@echo "Sepolia deploy:"
 	@echo "  make sepolia-import        Import deployer wallet interactively (ACCOUNT=$(ACCOUNT))"
 	@echo "  make sepolia-deploy        Deploy using --account + --password-file"
+	@echo "  make sepolia-policy-set    Set policy for TRADER on POLICY_REGISTRY"
+	@echo "  make sepolia-policy-set-ens Set policy for ENS_NAME on POLICY_REGISTRY"
+	@echo "  make sepolia-policy-read   Read policy for TRADER from POLICY_REGISTRY"
+	@echo "  make sepolia-hook-config   Set defaults on UNISWAP_EXE_GUARD"
+	@echo "  make sepolia-demo-sequence Run set/read/config sequence (requires TRADER)"
 	@echo ""
 	@echo "Required .env vars for sepolia-deploy: SEPOLIA_RPC_URL ENS_REGISTRY POOL_MANAGER"
+	@echo "Recommended .env vars for demo scripts: POLICY_REGISTRY UNISWAP_EXE_GUARD TRADER ENS_NAME"
 	@echo "Password file for sepolia-deploy: $(PASSWORD_FILE)"
+	@echo ""
+	@echo "UI:"
+	@echo "  make ui-config             Generate demo-ui/config.js from .env values"
+	@echo "  make ui-demo               Serve demo UI at http://127.0.0.1:4173"
 
 build:
 	forge build
@@ -38,6 +49,7 @@ deploy: ## generic deploy with raw private key (manual usage)
 		echo "Missing PRIVATE_KEY for make deploy"; \
 		exit 1; \
 	fi
+	OWNER=$$(cast wallet address --private-key $$PRIVATE_KEY) \
 	forge script $(DEPLOY_SCRIPT) --rpc-url $(LOCAL_RPC_URL) --private-key $$PRIVATE_KEY --broadcast
 
 sepolia-deploy:
@@ -53,6 +65,7 @@ sepolia-deploy:
 		echo "Missing password file: $(PASSWORD_FILE)"; \
 		exit 1; \
 	fi
+	OWNER=$$(cast wallet address --account $(ACCOUNT) --password-file $(PASSWORD_FILE)) \
 	forge script $(DEPLOY_SCRIPT) --rpc-url $(SEPOLIA_RPC_URL) --account $(ACCOUNT) --password-file $(PASSWORD_FILE) --broadcast
 
 sepolia-import:
@@ -71,3 +84,36 @@ local-demo:
 
 local-node:
 	anvil --host 127.0.0.1 --port 8545
+
+ui-config:
+	@mkdir -p demo-ui
+	@printf '%s\n' \
+	'window.DEMO_UI_CONFIG = {' \
+	'  POLICY_REGISTRY: "$(POLICY_REGISTRY)",' \
+	'  UNISWAP_EXE_GUARD: "$(UNISWAP_EXE_GUARD)",' \
+	'  TRADER: "$(TRADER)",' \
+	'  ENS_NAME: "$(ENS_NAME)",' \
+	'  DEFAULT_MAX_SWAP_ABS: "$(DEFAULT_MAX_SWAP_ABS)",' \
+	'  DEFAULT_COOLDOWN_SECONDS: "$(DEFAULT_COOLDOWN_SECONDS)",' \
+	'  MAX_SWAP_ABS: "$(MAX_SWAP_ABS)",' \
+	'  COOLDOWN_SECONDS: "$(COOLDOWN_SECONDS)"' \
+	'};' > demo-ui/config.js
+	@echo "Wrote demo-ui/config.js from .env"
+
+ui-demo: ui-config
+	python3 -m http.server 4173 --directory demo-ui
+
+sepolia-policy-set:
+	./demo/sepolia-policy-set.sh
+
+sepolia-policy-set-ens:
+	./demo/sepolia-policy-set-ens.sh
+
+sepolia-policy-read:
+	./demo/sepolia-policy-read.sh
+
+sepolia-hook-config:
+	./demo/sepolia-hook-config.sh
+
+sepolia-demo-sequence:
+	./demo/sepolia-demo-sequence.sh
