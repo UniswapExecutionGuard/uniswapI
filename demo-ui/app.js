@@ -63,6 +63,12 @@ function setIfEmpty(id, value) {
   if (!input.value.trim()) input.value = value;
 }
 
+function setFromConfig(id, ...values) {
+  const value = firstNonEmpty(...values);
+  if (!value) return;
+  el(id).value = value;
+}
+
 function getAddresses() {
   return {
     registry: el("registryAddress").value.trim(),
@@ -158,13 +164,14 @@ function applyConfigDefaults() {
   setIfEmpty("ensName", ensName);
   setIfEmpty("clearEnsName", ensName);
 
-  setIfEmpty("swapRouterAddress", UI_CONFIG.LIVE_SWAP_ROUTER);
-  setIfEmpty("swapToken0", UI_CONFIG.LIVE_TOKEN0);
-  setIfEmpty("swapToken1", UI_CONFIG.LIVE_TOKEN1);
-  setIfEmpty("swapFee", firstNonEmpty(UI_CONFIG.LIVE_POOL_FEE, DEFAULT_SWAP_FEE));
-  setIfEmpty("swapTickSpacing", firstNonEmpty(UI_CONFIG.LIVE_TICK_SPACING, DEFAULT_TICK_SPACING));
-  setIfEmpty("swapAllowedInput", firstNonEmpty(UI_CONFIG.LIVE_ALLOWED_INPUT, DEFAULT_ALLOWED_INPUT));
-  setIfEmpty("swapBlockedInput", firstNonEmpty(UI_CONFIG.LIVE_BLOCKED_INPUT, DEFAULT_BLOCKED_INPUT));
+  // For live demos, prefer current .env-backed values over stale localStorage values.
+  setFromConfig("swapRouterAddress", UI_CONFIG.LIVE_SWAP_ROUTER);
+  setFromConfig("swapToken0", UI_CONFIG.LIVE_TOKEN0);
+  setFromConfig("swapToken1", UI_CONFIG.LIVE_TOKEN1);
+  setFromConfig("swapFee", UI_CONFIG.LIVE_POOL_FEE, DEFAULT_SWAP_FEE);
+  setFromConfig("swapTickSpacing", UI_CONFIG.LIVE_TICK_SPACING, DEFAULT_TICK_SPACING);
+  setFromConfig("swapAllowedInput", UI_CONFIG.LIVE_ALLOWED_INPUT, DEFAULT_ALLOWED_INPUT);
+  setFromConfig("swapBlockedInput", UI_CONFIG.LIVE_BLOCKED_INPUT, DEFAULT_BLOCKED_INPUT);
 }
 
 async function connectWallet() {
