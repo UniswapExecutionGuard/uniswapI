@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UniswapExeGuard Demo UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <h1>UniswapExeGuard Demo Console</h1>
+        <p>Sepolia admin + policy interaction UI for live demos.</p>
+      </header>
+
+      <section class="card">
+        <h2>Wallet</h2>
+        <div class="row">
+          <button id="connectBtn">Connect Wallet</button>
+          <span id="walletState" class="mono">Not connected</span>
+        </div>
+        <div class="row">
+          <label for="registryAddress">PolicyRegistry</label>
+          <input id="registryAddress" placeholder="0x..." />
+        </div>
+        <div class="row">
+          <label for="hookAddress">UniswapExeGuard</label>
+          <input id="hookAddress" placeholder="0x..." />
+        </div>
+        <div class="row">
+          <button id="saveContractsBtn" class="secondary">Save Addresses</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Read Policy</h2>
+          <div class="row"><label for="readTrader">Trader</label><input id="readTrader" placeholder="0x..." /></div>
+          <button id="readPolicyBtn">Read</button>
+          <pre id="policyOut" class="mono">-</pre>
+        </article>
+
+        <article class="card">
+          <h2>Read Policy (ENS)</h2>
+          <div class="row"><label for="readEnsName">ENS Name</label><input id="readEnsName" placeholder="elisa.eth" /></div>
+          <button id="readEnsPolicyBtn">Resolve + Read</button>
+          <pre id="ensPolicyOut" class="mono">-</pre>
+        </article>
+
+        <article class="card">
+          <h2>Set Policy (Address)</h2>
+          <div class="row"><label for="setTrader">Trader</label><input id="setTrader" placeholder="0x..." /></div>
+          <div class="row"><label for="setMaxSwap">maxSwapAbs</label><input id="setMaxSwap" value="1000000000000000000" /></div>
+          <div class="row"><label for="setCooldown">cooldownSeconds</label><input id="setCooldown" value="60" /></div>
+          <button id="setPolicyBtn">Set Policy</button>
+        </article>
+
+        <article class="card">
+          <h2>Set Policy (ENS)</h2>
+          <div class="row"><label for="ensName">ENS Name</label><input id="ensName" placeholder="alice.eth" /></div>
+          <div class="row"><label for="ensMaxSwap">maxSwapAbs</label><input id="ensMaxSwap" value="1000000000000000000" /></div>
+          <div class="row"><label for="ensCooldown">cooldownSeconds</label><input id="ensCooldown" value="60" /></div>
+          <button id="setEnsPolicyBtn">Set ENS Policy</button>
+        </article>
+
+        <article class="card">
+          <h2>Clear Policy</h2>
+          <div class="row"><label for="clearTrader">Trader</label><input id="clearTrader" placeholder="0x..." /></div>
+          <button id="clearPolicyBtn" class="danger">Clear</button>
+          <div class="row"><label for="clearEnsName">ENS Name</label><input id="clearEnsName" placeholder="alice.eth" /></div>
+          <button id="clearEnsPolicyBtn" class="danger">Clear by ENS</button>
+        </article>
+
+        <article class="card">
+          <h2>Hook Defaults</h2>
+          <div class="row"><label for="defaultMaxSwap">defaultMaxSwapAbs</label><input id="defaultMaxSwap" value="1000000000000000000" /></div>
+          <div class="row"><label for="defaultCooldown">defaultCooldownSeconds</label><input id="defaultCooldown" value="60" /></div>
+          <button id="setDefaultsBtn">Set Defaults</button>
+        </article>
+
+      </section>
+
+      <section class="card">
+        <h2>Events</h2>
+        <div class="row">
+          <label for="blockLookback">Blocks to scan</label>
+          <input id="blockLookback" value="2000" />
+          <button id="loadEventsBtn" class="secondary">Load</button>
+        </div>
+        <pre id="eventsOut" class="mono">-</pre>
+      </section>
+
+      <section class="card">
+        <h2>Transaction Log</h2>
+        <pre id="txLog" class="mono">-</pre>
+      </section>
+    </main>
+
+    <script src="./config.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

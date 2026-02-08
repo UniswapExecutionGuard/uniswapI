@@ -8,9 +8,6 @@ out/
 /broadcast/**/run-latest.json
 /broadcast/**/run-*.json
 
-# Docs
-docs/
-
 # Dotenv file
 .env
 .password
