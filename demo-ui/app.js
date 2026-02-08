@@ -1,4 +1,4 @@
-import { BrowserProvider, Contract, MaxUint256 } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+import { AbiCoder, BrowserProvider, Contract, MaxUint256, keccak256 } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
 
 const POLICY_ABI = [
   "function setPolicy(address trader,uint256 maxSwapAbs,uint256 cooldownSeconds)",
@@ -12,6 +12,9 @@ const POLICY_ABI = [
 
 const HOOK_ABI = [
   "function setDefaults(uint256 defaultMaxSwapAbs,uint256 defaultCooldownSeconds)",
+  "function defaultMaxSwapAbs() view returns (uint256)",
+  "function defaultCooldownSeconds() view returns (uint256)",
+  "function lastSwapTimestampByPool(address trader,bytes32 poolId) view returns (uint256)",
   "event DefaultsUpdated(uint256 defaultMaxSwapAbs,uint256 defaultCooldownSeconds)",
   "event SwapAllowed(address indexed trader,int256 amountSpecified,uint256 maxSwapAbs,uint256 cooldownSeconds)",
   "event SwapBlocked(address indexed trader,uint8 reason,int256 amountSpecified)"
@@ -34,16 +37,19 @@ const DEFAULT_ALLOWED_INPUT = "100000000000000000";
 const DEFAULT_BLOCKED_INPUT = "2000000000000000000";
 const MIN_SQRT_PRICE_PLUS_ONE = 4295128740n;
 const UI_CONFIG = window.DEMO_UI_CONFIG || {};
+const abiCoder = AbiCoder.defaultAbiCoder();
 
 const el = (id) => document.getElementById(id);
 const txLog = el("txLog");
 const eventsOut = el("eventsOut");
 const walletState = el("walletState");
 const swapOut = el("swapOut");
+const stateOut = el("stateOut");
 
 let browserProvider;
 let signer;
 let connectedAddress = "";
+let stateSnapshot = null;
 
 function appendLog(line) {
   const ts = new Date().toLocaleTimeString();
@@ -125,6 +131,8 @@ function saveAddresses() {
   localStorage.setItem("ueg_swap_tick_spacing", el("swapTickSpacing").value.trim());
   localStorage.setItem("ueg_swap_allowed_input", el("swapAllowedInput").value.trim());
   localStorage.setItem("ueg_swap_blocked_input", el("swapBlockedInput").value.trim());
+  localStorage.setItem("ueg_state_trader", el("stateTrader").value.trim());
+  localStorage.setItem("ueg_state_test_amount", el("stateTestAmount").value.trim());
   appendLog("Saved contract addresses locally");
 }
 
@@ -138,6 +146,8 @@ function loadAddresses() {
   el("swapTickSpacing").value = localStorage.getItem("ueg_swap_tick_spacing") || "";
   el("swapAllowedInput").value = localStorage.getItem("ueg_swap_allowed_input") || "";
   el("swapBlockedInput").value = localStorage.getItem("ueg_swap_blocked_input") || "";
+  el("stateTrader").value = localStorage.getItem("ueg_state_trader") || "";
+  el("stateTestAmount").value = localStorage.getItem("ueg_state_test_amount") || "";
   applyConfigDefaults();
 }
 
@@ -158,6 +168,7 @@ function applyConfigDefaults() {
   setIfEmpty("readTrader", trader);
   setIfEmpty("setTrader", trader);
   setIfEmpty("clearTrader", trader);
+  setIfEmpty("stateTrader", trader);
 
   const ensName = firstNonEmpty(UI_CONFIG.ENS_NAME);
   setIfEmpty("readEnsName", ensName);
@@ -172,6 +183,7 @@ function applyConfigDefaults() {
   setFromConfig("swapTickSpacing", UI_CONFIG.LIVE_TICK_SPACING, DEFAULT_TICK_SPACING);
   setFromConfig("swapAllowedInput", UI_CONFIG.LIVE_ALLOWED_INPUT, DEFAULT_ALLOWED_INPUT);
   setFromConfig("swapBlockedInput", UI_CONFIG.LIVE_BLOCKED_INPUT, DEFAULT_BLOCKED_INPUT);
+  setFromConfig("stateTestAmount", UI_CONFIG.LIVE_ALLOWED_INPUT, DEFAULT_ALLOWED_INPUT);
 }
 
 async function connectWallet() {
@@ -328,6 +340,101 @@ function buildSwapKey() {
   };
 }
 
+function buildPoolIdFromInputs() {
+  const key = buildSwapKey();
+  const encoded = abiCoder.encode(
+    ["tuple(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)"],
+    [key]
+  );
+  return { key, poolId: keccak256(encoded) };
+}
+
+function parseBigIntInput(label, value) {
+  const trimmed = value.trim();
+  if (!trimmed) throw new Error(`${label} is required`);
+  try {
+    return BigInt(trimmed);
+  } catch {
+    throw new Error(`${label} must be an integer in wei`);
+  }
+}
+
+function absBigInt(value) {
+  return value < 0n ? -value : value;
+}
+
+function formatUnix(unixSeconds) {
+  if (unixSeconds === 0n) return "0";
+  return `${unixSeconds.toString()} (${new Date(Number(unixSeconds) * 1000).toLocaleString()})`;
+}
+
+function renderPolicyState(snapshot) {
+  const nowLocal = BigInt(Math.floor(Date.now() / 1000));
+  const remainingSeconds = snapshot.nextAllowedTimestamp > nowLocal ? snapshot.nextAllowedTimestamp - nowLocal : 0n;
+  const amountAllowed = snapshot.maxSwapAbs === 0n || snapshot.testAmountAbs <= snapshot.maxSwapAbs;
+  const cooldownAllowed = snapshot.cooldownSeconds === 0n || snapshot.lastSwapTimestamp === 0n || nowLocal >= snapshot.nextAllowedTimestamp;
+  const allowedNow = amountAllowed && cooldownAllowed;
+
+  stateOut.textContent = JSON.stringify(
+    {
+      trader: snapshot.trader,
+      poolId: snapshot.poolId,
+      poolKey: snapshot.key,
+      policySource: snapshot.policySource,
+      maxSwapAbs: snapshot.maxSwapAbs.toString(),
+      cooldownSeconds: snapshot.cooldownSeconds.toString(),
+      chainTimestampAtRefresh: formatUnix(snapshot.chainTimestamp),
+      lastSwapTimestamp: formatUnix(snapshot.lastSwapTimestamp),
+      nextAllowedTimestamp: formatUnix(snapshot.nextAllowedTimestamp),
+      remainingSeconds: remainingSeconds.toString(),
+      testAmountAbs: snapshot.testAmountAbs.toString(),
+      amountCheck: amountAllowed ? "PASS" : "BLOCKED",
+      cooldownCheck: cooldownAllowed ? "PASS" : "BLOCKED",
+      allowedNow
+    },
+    null,
+    2
+  );
+}
+
+async function refreshPolicyState() {
+  if (!browserProvider) throw new Error("Connect wallet first");
+  const trader = el("stateTrader").value.trim();
+  if (!trader) throw new Error("Trader address is required");
+
+  const testAmountAbs = absBigInt(parseBigIntInput("Test amount", el("stateTestAmount").value));
+  const registry = getRegistryContract(false);
+  const hook = getHookContract(false);
+  const { key, poolId } = buildPoolIdFromInputs();
+
+  const [[policyMaxSwap, policyCooldown, hasCustomPolicy], defaultMaxSwap, defaultCooldown, lastSwap, latestBlock] = await Promise.all([
+    registry.getPolicy(trader),
+    hook.defaultMaxSwapAbs(),
+    hook.defaultCooldownSeconds(),
+    hook.lastSwapTimestampByPool(trader, poolId),
+    browserProvider.getBlock("latest")
+  ]);
+
+  const maxSwapAbs = hasCustomPolicy ? policyMaxSwap : defaultMaxSwap;
+  const cooldownSeconds = hasCustomPolicy ? policyCooldown : defaultCooldown;
+  const nowChain = BigInt(latestBlock?.timestamp || 0);
+  const nextAllowedTimestamp = lastSwap + cooldownSeconds;
+
+  stateSnapshot = {
+    trader,
+    poolId,
+    key,
+    policySource: hasCustomPolicy ? "custom-policy" : "hook-defaults",
+    maxSwapAbs,
+    cooldownSeconds,
+    lastSwapTimestamp: lastSwap,
+    nextAllowedTimestamp,
+    chainTimestamp: nowChain,
+    testAmountAbs
+  };
+  renderPolicyState(stateSnapshot);
+}
+
 async function approveSwapTokens() {
   if (!signer) throw new Error("Connect wallet first");
   const { router, token0, token1 } = getSwapInputs();
@@ -436,5 +543,10 @@ el("setDefaultsBtn").addEventListener("click", () =>
 el("approveSwapBtn").addEventListener("click", () => onClick(approveSwapTokens));
 el("runAllowedSwapBtn").addEventListener("click", () => onClick(async () => runSwap(false)));
 el("runBlockedSwapBtn").addEventListener("click", () => onClick(async () => runSwap(true)));
+el("refreshStateBtn").addEventListener("click", () => onClick(refreshPolicyState));
+
+setInterval(() => {
+  if (stateSnapshot) renderPolicyState(stateSnapshot);
+}, 1000);
 
 loadAddresses();

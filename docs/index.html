@@ -96,6 +96,15 @@
           <pre id="swapOut" class="mono">-</pre>
         </article>
 
+        <article class="card">
+          <h2>Policy State (Trader + Pool)</h2>
+          <div class="row"><label for="stateTrader">Trader</label><input id="stateTrader" placeholder="0x..." /></div>
+          <div class="row"><label for="stateTestAmount">Test Amount (wei)</label><input id="stateTestAmount" value="100000000000000000" /></div>
+          <button id="refreshStateBtn" class="secondary">Refresh State</button>
+          <p class="mono">Uses the same pool key fields as Live Swap: token0/token1/fee/tickSpacing/hook.</p>
+          <pre id="stateOut" class="mono">-</pre>
+        </article>
+
       </section>
 
       <section class="card">

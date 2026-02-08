@@ -203,8 +203,11 @@ UI features:
 - Set ENS-based policy
 - Set hook defaults
 - Run live swap checks via `PoolSwapTest` (approve tokens, allowed swap, blocked swap)
+- Inspect live policy state (effective max swap, cooldown timer, remaining seconds, and allowed-now decision)
 - View recent `PolicySet`, `PolicyCleared`, `DefaultsUpdated`, `SwapAllowed`, and `SwapBlocked` events
 - Auto-prefill contract addresses and default values from `.env` via generated `demo-ui/config.js` and `docs/config.js`
+
+Important for the policy state panel: `token0`, `token1`, `fee`, `tickSpacing`, and `hook` must match the exact pool key used for swaps. If one value differs, you are querying a different pool id and cooldown state.
 
 ## Demo Flow (Expected)
 
