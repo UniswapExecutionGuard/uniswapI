@@ -1,5 +1,5 @@
 .PHONY: help build test local-node local-demo sepolia-import sepolia-deploy deploy \
-	ui-config ui-demo sepolia-policy-set sepolia-policy-set-ens sepolia-policy-read sepolia-hook-config sepolia-demo-sequence
+	ui-config ui-demo sepolia-policy-set sepolia-policy-set-ens sepolia-policy-read sepolia-hook-config sepolia-demo-sequence sepolia-live-swap
 
 ifneq (,$(wildcard .env))
 include .env
@@ -11,6 +11,7 @@ ACCOUNT ?= sepolia-deployer
 PASSWORD_FILE ?= .password
 DEPLOY_SCRIPT := script/DeployUniswapExeGuard.s.sol:DeployUniswapExeGuard
 DEMO_SCRIPT := script/DemoFlow.s.sol:DemoFlow
+LIVE_SWAP_SCRIPT := script/SepoliaLiveSwapDemo.s.sol:SepoliaLiveSwapDemo
 
 help:
 	@echo "Core:"
@@ -29,6 +30,7 @@ help:
 	@echo "  make sepolia-policy-read   Read policy for TRADER from POLICY_REGISTRY"
 	@echo "  make sepolia-hook-config   Set defaults on UNISWAP_EXE_GUARD"
 	@echo "  make sepolia-demo-sequence Run set/read/config sequence (requires TRADER)"
+	@echo "  make sepolia-live-swap     Run real PoolManager live swap demo (init + liquidity + allowed/blocked swap)"
 	@echo ""
 	@echo "Required .env vars for sepolia-deploy: SEPOLIA_RPC_URL ENS_REGISTRY POOL_MANAGER"
 	@echo "Recommended .env vars for demo scripts: POLICY_REGISTRY UNISWAP_EXE_GUARD TRADER ENS_NAME"
@@ -96,7 +98,14 @@ ui-config:
 	'  DEFAULT_MAX_SWAP_ABS: "$(DEFAULT_MAX_SWAP_ABS)",' \
 	'  DEFAULT_COOLDOWN_SECONDS: "$(DEFAULT_COOLDOWN_SECONDS)",' \
 	'  MAX_SWAP_ABS: "$(MAX_SWAP_ABS)",' \
-	'  COOLDOWN_SECONDS: "$(COOLDOWN_SECONDS)"' \
+	'  COOLDOWN_SECONDS: "$(COOLDOWN_SECONDS)",' \
+	'  LIVE_SWAP_ROUTER: "$(LIVE_SWAP_ROUTER)",' \
+	'  LIVE_TOKEN0: "$(LIVE_TOKEN0)",' \
+	'  LIVE_TOKEN1: "$(LIVE_TOKEN1)",' \
+	'  LIVE_POOL_FEE: "$(LIVE_POOL_FEE)",' \
+	'  LIVE_TICK_SPACING: "$(LIVE_TICK_SPACING)",' \
+	'  LIVE_ALLOWED_INPUT: "$(LIVE_ALLOWED_INPUT)",' \
+	'  LIVE_BLOCKED_INPUT: "$(LIVE_BLOCKED_INPUT)"' \
 	'};' > demo-ui/config.js
 	@echo "Wrote demo-ui/config.js from .env"
 
@@ -117,3 +126,19 @@ sepolia-hook-config:
 
 sepolia-demo-sequence:
 	./demo/sepolia-demo-sequence.sh
+
+sepolia-live-swap:
+	@if [ -z "$(SEPOLIA_RPC_URL)" ]; then \
+		echo "Missing SEPOLIA_RPC_URL in .env"; \
+		exit 1; \
+	fi
+	@if [ -z "$$POOL_MANAGER" ] || [ -z "$$POLICY_REGISTRY" ] || [ -z "$$UNISWAP_EXE_GUARD" ]; then \
+		echo "Missing required env vars: POOL_MANAGER POLICY_REGISTRY UNISWAP_EXE_GUARD"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(PASSWORD_FILE)" ]; then \
+		echo "Missing password file: $(PASSWORD_FILE)"; \
+		exit 1; \
+	fi
+	OWNER=$$(cast wallet address --account $(ACCOUNT) --password-file $(PASSWORD_FILE)) \
+	forge script $(LIVE_SWAP_SCRIPT) --rpc-url $(SEPOLIA_RPC_URL) --account $(ACCOUNT) --password-file $(PASSWORD_FILE) --broadcast

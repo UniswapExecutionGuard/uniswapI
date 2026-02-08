@@ -81,6 +81,21 @@
           <button id="setDefaultsBtn">Set Defaults</button>
         </article>
 
+        <article class="card">
+          <h2>Live Swap Test</h2>
+          <div class="row"><label for="swapRouterAddress">PoolSwapTest</label><input id="swapRouterAddress" placeholder="0x..." /></div>
+          <div class="row"><label for="swapToken0">Token0</label><input id="swapToken0" placeholder="0x..." /></div>
+          <div class="row"><label for="swapToken1">Token1</label><input id="swapToken1" placeholder="0x..." /></div>
+          <div class="row"><label for="swapFee">Pool Fee</label><input id="swapFee" value="3000" /></div>
+          <div class="row"><label for="swapTickSpacing">Tick Spacing</label><input id="swapTickSpacing" value="60" /></div>
+          <div class="row"><label for="swapAllowedInput">Allowed Input</label><input id="swapAllowedInput" value="100000000000000000" /></div>
+          <div class="row"><label for="swapBlockedInput">Blocked Input</label><input id="swapBlockedInput" value="2000000000000000000" /></div>
+          <button id="approveSwapBtn">Approve Tokens</button>
+          <button id="runAllowedSwapBtn">Run Allowed Swap</button>
+          <button id="runBlockedSwapBtn" class="danger">Run Blocked Swap</button>
+          <pre id="swapOut" class="mono">-</pre>
+        </article>
+
       </section>
 
       <section class="card">

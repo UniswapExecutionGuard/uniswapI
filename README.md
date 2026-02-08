@@ -118,6 +118,29 @@ make sepolia-policy-set-ens
 make sepolia-policy-read
 make sepolia-hook-config
 make sepolia-demo-sequence
+make sepolia-live-swap
+```
+
+`make sepolia-live-swap` runs a real Uniswap v4 flow against Sepolia `POOL_MANAGER`:
+
+- deploys 2 test ERC20s
+- initializes a hook-enabled pool
+- adds liquidity
+- executes one allowed swap and one blocked swap
+
+Optional `.env` overrides for this command:
+
+```shell
+LIVE_TOKEN_MINT=<default 1000000 ether>
+LIVE_LIQUIDITY_DELTA=<default 1000000>
+LIVE_ALLOWED_INPUT=<default 0.1 ether>
+LIVE_BLOCKED_INPUT=<default 2 ether>
+LIVE_MAX_SWAP_ABS=<default 1 ether>
+LIVE_COOLDOWN_SECONDS=<default 0>
+LIVE_POOL_FEE=<default 3000>
+LIVE_TICK_SPACING=<default 60>
+LIVE_TICK_LOWER=<default -120>
+LIVE_TICK_UPPER=<default 120>
 ```
 
 ## Demo (Local TxIDs)
@@ -166,6 +189,7 @@ UI features:
 - Set/read/clear policies in `PolicyRegistry` (address or ENS)
 - Set ENS-based policy
 - Set hook defaults
+- Run live swap checks via `PoolSwapTest` (approve tokens, allowed swap, blocked swap)
 - View recent `PolicySet`, `PolicyCleared`, `DefaultsUpdated`, `SwapAllowed`, and `SwapBlocked` events
 - Auto-prefill contract addresses and default values from `.env` via generated `demo-ui/config.js`
 

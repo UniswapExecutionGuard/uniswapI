@@ -1,4 +1,4 @@
-import { BrowserProvider, Contract } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+import { BrowserProvider, Contract, MaxUint256 } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
 
 const POLICY_ABI = [
   "function setPolicy(address trader,uint256 maxSwapAbs,uint256 cooldownSeconds)",
@@ -17,15 +17,29 @@ const HOOK_ABI = [
   "event SwapBlocked(address indexed trader,uint8 reason,int256 amountSpecified)"
 ];
 
+const SWAP_ROUTER_ABI = [
+  "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,(bool takeClaims,bool settleUsingBurn) testSettings,bytes hookData) payable returns (int256 delta)"
+];
+
+const ERC20_ABI = [
+  "function approve(address spender,uint256 amount) returns (bool)"
+];
+
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const DEFAULT_MAX_SWAP_ABS = "1000000000000000000";
 const DEFAULT_COOLDOWN_SECONDS = "60";
+const DEFAULT_SWAP_FEE = "3000";
+const DEFAULT_TICK_SPACING = "60";
+const DEFAULT_ALLOWED_INPUT = "100000000000000000";
+const DEFAULT_BLOCKED_INPUT = "2000000000000000000";
+const MIN_SQRT_PRICE_PLUS_ONE = 4295128740n;
 const UI_CONFIG = window.DEMO_UI_CONFIG || {};
 
 const el = (id) => document.getElementById(id);
 const txLog = el("txLog");
 const eventsOut = el("eventsOut");
 const walletState = el("walletState");
+const swapOut = el("swapOut");
 
 let browserProvider;
 let signer;
@@ -56,6 +70,18 @@ function getAddresses() {
   };
 }
 
+function getSwapInputs() {
+  return {
+    router: el("swapRouterAddress").value.trim(),
+    token0: el("swapToken0").value.trim(),
+    token1: el("swapToken1").value.trim(),
+    fee: el("swapFee").value.trim(),
+    tickSpacing: el("swapTickSpacing").value.trim(),
+    allowedInput: el("swapAllowedInput").value.trim(),
+    blockedInput: el("swapBlockedInput").value.trim()
+  };
+}
+
 function getRegistryContract(withSigner = true) {
   const { registry } = getAddresses();
   if (!registry) throw new Error("Set PolicyRegistry address first");
@@ -70,15 +96,42 @@ function getHookContract(withSigner = true) {
   return new Contract(hook, HOOK_ABI, providerOrSigner);
 }
 
+function getSwapRouterContract(withSigner = true) {
+  const { router } = getSwapInputs();
+  if (!router) throw new Error("Set PoolSwapTest address first");
+  const providerOrSigner = withSigner ? signer : browserProvider;
+  return new Contract(router, SWAP_ROUTER_ABI, providerOrSigner);
+}
+
+function getTokenContract(tokenAddress, withSigner = true) {
+  if (!tokenAddress) throw new Error("Token address missing");
+  const providerOrSigner = withSigner ? signer : browserProvider;
+  return new Contract(tokenAddress, ERC20_ABI, providerOrSigner);
+}
+
 function saveAddresses() {
   localStorage.setItem("ueg_registry", el("registryAddress").value.trim());
   localStorage.setItem("ueg_hook", el("hookAddress").value.trim());
+  localStorage.setItem("ueg_swap_router", el("swapRouterAddress").value.trim());
+  localStorage.setItem("ueg_swap_token0", el("swapToken0").value.trim());
+  localStorage.setItem("ueg_swap_token1", el("swapToken1").value.trim());
+  localStorage.setItem("ueg_swap_fee", el("swapFee").value.trim());
+  localStorage.setItem("ueg_swap_tick_spacing", el("swapTickSpacing").value.trim());
+  localStorage.setItem("ueg_swap_allowed_input", el("swapAllowedInput").value.trim());
+  localStorage.setItem("ueg_swap_blocked_input", el("swapBlockedInput").value.trim());
   appendLog("Saved contract addresses locally");
 }
 
 function loadAddresses() {
   el("registryAddress").value = localStorage.getItem("ueg_registry") || "";
   el("hookAddress").value = localStorage.getItem("ueg_hook") || "";
+  el("swapRouterAddress").value = localStorage.getItem("ueg_swap_router") || "";
+  el("swapToken0").value = localStorage.getItem("ueg_swap_token0") || "";
+  el("swapToken1").value = localStorage.getItem("ueg_swap_token1") || "";
+  el("swapFee").value = localStorage.getItem("ueg_swap_fee") || "";
+  el("swapTickSpacing").value = localStorage.getItem("ueg_swap_tick_spacing") || "";
+  el("swapAllowedInput").value = localStorage.getItem("ueg_swap_allowed_input") || "";
+  el("swapBlockedInput").value = localStorage.getItem("ueg_swap_blocked_input") || "";
   applyConfigDefaults();
 }
 
@@ -104,6 +157,14 @@ function applyConfigDefaults() {
   setIfEmpty("readEnsName", ensName);
   setIfEmpty("ensName", ensName);
   setIfEmpty("clearEnsName", ensName);
+
+  setIfEmpty("swapRouterAddress", UI_CONFIG.LIVE_SWAP_ROUTER);
+  setIfEmpty("swapToken0", UI_CONFIG.LIVE_TOKEN0);
+  setIfEmpty("swapToken1", UI_CONFIG.LIVE_TOKEN1);
+  setIfEmpty("swapFee", firstNonEmpty(UI_CONFIG.LIVE_POOL_FEE, DEFAULT_SWAP_FEE));
+  setIfEmpty("swapTickSpacing", firstNonEmpty(UI_CONFIG.LIVE_TICK_SPACING, DEFAULT_TICK_SPACING));
+  setIfEmpty("swapAllowedInput", firstNonEmpty(UI_CONFIG.LIVE_ALLOWED_INPUT, DEFAULT_ALLOWED_INPUT));
+  setIfEmpty("swapBlockedInput", firstNonEmpty(UI_CONFIG.LIVE_BLOCKED_INPUT, DEFAULT_BLOCKED_INPUT));
 }
 
 async function connectWallet() {
@@ -218,6 +279,102 @@ async function loadEvents() {
     : "No events in range";
 }
 
+function renderSwapResult(payload) {
+  swapOut.textContent = JSON.stringify(payload, null, 2);
+}
+
+function parseError(err) {
+  return (
+    err?.shortMessage ||
+    err?.reason ||
+    err?.info?.error?.message ||
+    err?.message ||
+    String(err)
+  );
+}
+
+function normalizeAddress(addr) {
+  return addr.toLowerCase();
+}
+
+function sortAddressPair(a, b) {
+  const aNorm = normalizeAddress(a);
+  const bNorm = normalizeAddress(b);
+  return aNorm < bNorm ? [a, b] : [b, a];
+}
+
+function buildSwapKey() {
+  const { hook } = getAddresses();
+  if (!hook) throw new Error("Set UniswapExeGuard address first");
+
+  const { token0, token1, fee, tickSpacing } = getSwapInputs();
+  if (!token0 || !token1) throw new Error("Set Token0 and Token1");
+  if (!fee || !tickSpacing) throw new Error("Set fee and tick spacing");
+
+  const [currency0, currency1] = sortAddressPair(token0, token1);
+  return {
+    currency0,
+    currency1,
+    fee: Number(fee),
+    tickSpacing: Number(tickSpacing),
+    hooks: hook
+  };
+}
+
+async function approveSwapTokens() {
+  if (!signer) throw new Error("Connect wallet first");
+  const { router, token0, token1 } = getSwapInputs();
+  if (!router || !token0 || !token1) throw new Error("Set PoolSwapTest, Token0, Token1");
+
+  const token0c = getTokenContract(token0, true);
+  const token1c = getTokenContract(token1, true);
+
+  await sendTx(`approve token0 -> ${router}`, () => token0c.approve(router, MaxUint256));
+  if (normalizeAddress(token1) !== normalizeAddress(token0)) {
+    await sendTx(`approve token1 -> ${router}`, () => token1c.approve(router, MaxUint256));
+  }
+  renderSwapResult({ approved: true, router, token0, token1 });
+}
+
+async function runSwap(expectBlocked) {
+  if (!signer) throw new Error("Connect wallet first");
+  const router = getSwapRouterContract(true);
+  const key = buildSwapKey();
+  const { allowedInput, blockedInput } = getSwapInputs();
+  const amountRaw = expectBlocked ? blockedInput : allowedInput;
+  if (!amountRaw) throw new Error("Swap input amount is required");
+
+  const params = {
+    zeroForOne: true,
+    amountSpecified: -BigInt(amountRaw),
+    sqrtPriceLimitX96: MIN_SQRT_PRICE_PLUS_ONE
+  };
+  const settings = { takeClaims: false, settleUsingBurn: false };
+
+  try {
+    const tx = await router.swap(key, params, settings, "0x");
+    appendLog(`${expectBlocked ? "blockedSwap" : "allowedSwap"} tx submitted: ${tx.hash}`);
+    const rcpt = await tx.wait();
+    appendLog(`${expectBlocked ? "blockedSwap" : "allowedSwap"} confirmed in block ${rcpt.blockNumber}`);
+    renderSwapResult({
+      action: expectBlocked ? "blockedSwap" : "allowedSwap",
+      success: true,
+      txHash: tx.hash
+    });
+    if (expectBlocked) appendLog("WARNING: blocked swap unexpectedly succeeded");
+  } catch (err) {
+    const message = parseError(err);
+    if (!expectBlocked) throw err;
+    appendLog(`Expected blocked swap revert: ${message}`);
+    renderSwapResult({
+      action: "blockedSwap",
+      success: false,
+      expected: true,
+      error: message
+    });
+  }
+}
+
 async function onClick(handler) {
   try {
     await handler();
@@ -269,5 +426,8 @@ el("setDefaultsBtn").addEventListener("click", () =>
     await sendTx("setDefaults", () => hook.setDefaults(maxSwap, cooldown));
   })
 );
+el("approveSwapBtn").addEventListener("click", () => onClick(approveSwapTokens));
+el("runAllowedSwapBtn").addEventListener("click", () => onClick(async () => runSwap(false)));
+el("runBlockedSwapBtn").addEventListener("click", () => onClick(async () => runSwap(true)));
 
 loadAddresses();
